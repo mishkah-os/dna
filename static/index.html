@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <title>DNA Pattern Explorer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+  window.MishkahAutoConfig = {
+    css: 'mi',
+    paths: {
+      utils: '/static/lib/mishkah-utils.js',
+      core: '/static/lib/mishkah.core.js',
+      ui: '/static/lib/mishkah-ui.js',
+      htmlx: '/static/lib/mishkah-htmlx.js',
+      css: '/static/lib/mishkah-css.css'
+    },
+    chart: { cdn: '/static/vendor/chart.umd.min.js' },
+    plotly: { cdn: 'https://cdn.plot.ly/plot ly-2.29.1.min.js' }
+  };
+  </script>
+  <script src="/static/lib/mishkah.js" data-htmlx data-css="mi"></script>
+  <script src="/static/lib/mishkah-plotly.js"></script>
+  <script src="/static/js/api.js"></script>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)]">
+  <div id="app"></div>
+  
+  <template id="dna-dashboard">
+    <script type="application/json" data-m-env data-m-path="env">
+      {
+        "theme": "dark",
+        "lang": "ar",
+        "dir": "rtl"
+      }
+    </script>
+
+    <script type="application/json" data-m-data data-m-path="data">
+      {
+        "stats": {
+          "models": 0,
+          "experiments": 0,
+          "patterns": 0
+        },
+        "recentExperiments": []
+      }
+    </script>
+
+    <!-- Main Layout -->
+    <div data-m-scope="dna-dashboard" class="flex h-screen flex-col">
+      <!-- Header -->
+      <header class="flex items-center justify-between border-b border-[var(--border)] bg-[var(--card)] px-6 py-4">
+        <div>
+          <h1 class="text-2xl font-bold">🧬 DNA Pattern Explorer</h1>
+          <p class="text-sm text-[var(--muted-foreground)]">مستكشف الأنماط الهندسية في نماذج الذكاء الاصطناعي</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <theme-switcher themes="dark,light"></theme-switcher>
+          <lang-switcher langs="ar,en"></lang-switcher>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="border-b border-[var(--border)] bg-[var(--surface-1)] px-6 py-3">
+        <div class="flex gap-2">
+          <a href="/" class="rounded-lg bg-[var(--primary)] px-4 py-2 font-medium text-[var(--primary-foreground)]">Dashboard</a>
+          <a href="/static/models.html" class="rounded-lg px-4 py-2 hover:bg-[var(--accent)]">Models</a>
+          <a href="/static/patterns.html" class="rounded-lg px-4 py-2 hover:bg-[var(--accent)]">Patterns</a>
+          <a href="/static/viz.html" class="rounded-lg px-4 py-2 hover:bg-[var(--accent)]">Visualization</a>
+          <a href="/static/experiment.html" class="rounded-lg px-4 py-2 hover:bg-[var(--accent)]">Experiments</a>
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="flex-1 overflow-auto p-6">
+        <!-- Stats Grid -->
+        <div class="mb-6 grid gap-4 sm:grid-cols-3">
+          <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
+            <p class="text-sm text-[var(--muted-foreground)]">Models</p>
+            <strong class="block text-3xl font-bold text-[var(--primary)]">{state.data.stats.models}</strong>
+          </div>
+          <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
+            <p class="text-sm text-[var(--muted-foreground)]">Experiments</p>
+            <strong class="block text-3xl font-bold text-[var(--accent)]">{state.data.stats.experiments}</strong>
+          </div>
+          <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
+            <p class="text-sm text-[var(--muted-foreground)]">Patterns</p>
+            <strong class="block text-3xl font-bold text-[var(--secondary)]">{state.data.stats.patterns}</strong>
+          </div>
+        </div>
+
+        <!-- Recent Experiments -->
+        <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
+          <h2 class="mb-4 text-xl font-semibold">Recent Experiments</h2>
+          <div x-if="state.data.recentExperiments.length > 0" class="space-y-2">
+            <div x-for="exp in state.data.recentExperiments" key="exp.id" 
+                 class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
+              <div>
+                <strong class="font-medium">{exp.name}</strong>
+                <p class="text-sm text-[var(--muted-foreground)]">{exp.model_name}</p>
+              </div>
+              <span class="rounded-full px-3 py-1 text-xs font-medium"
+                    x-class="exp.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'">
+                {exp.status}
+              </span>
+            </div>
+          </div>
+          <p x-if="state.data.recentExperiments.length === 0" class="text-center text-[var(--muted-foreground)]">
+            No experiments yet. Start your first experiment!
+          </p>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Load stats on mount
+      async function loadDashboardData(ctx) {
+        try {
+          const [models, experiments, patterns] = await Promise.all([
+            API.models.list(),
+            API.experiments.list({ limit: 5 }),
+            API.patterns.list()
+          ]);
+
+          ctx.setState((state) => {
+            state.data.stats.models = models.length;
+            state.data.stats.experiments = experiments.length;
+            state.data.stats.patterns = patterns.length;
+            state.data.recentExperiments = experiments;
+            return state;
+          });
+        } catch (err) {
+          console.error('Failed to load dashboard data:', err);
+        }
+      }
+
+      // Auto-init
+      if (window.MishkahAuto && typeof window.MishkahAuto.ready === 'function') {
+        window.MishkahAuto.ready(function(M) {
+          const htmlxAttr = document.documentElement.getAttribute('data-htmlx');
+          if (htmlxAttr && M && M.app && typeof M.app.make === 'function') {
+            const app = M.app.make();
+            loadDashboardData(app);
+          }
+        });
+      }
+    </script>
+  </template>
+</body>
+</html>
