@@ -1,5 +1,5 @@
-# Multi-stage build for DNA Pattern Mining System
-# Optimized for SIREN-based pattern discovery
+# Docker image for DNA Pattern Explorer Web Application
+# Multi-stage build optimized for web serving
 
 # Stage 1: Builder
 FROM python:3.10-slim as builder
@@ -29,6 +29,7 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     libgomp1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -36,23 +37,17 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
+COPY app.py /app/
+COPY api/ /app/api/
+COPY database/ /app/database/
+COPY static/ /app/static/
 COPY src/ /app/src/
-COPY scripts/ /app/scripts/
-COPY docs/ /app/docs/
-COPY setup.py /app/
 COPY README.md /app/
-COPY QUICKSTART.md /app/
-COPY SIREN_PATTERN_MINING.md /app/
 
-# Install the package
-RUN pip install -e .
-
-# Create output directories
+# Create data directories
 RUN mkdir -p \
-    /app/pattern_mining_output \
-    /app/pattern_mining_output/checkpoints \
-    /app/pattern_mining_output/visualizations \
-    /app/pattern_mining_output/data \
+    /app/data \
+    /app/data/models \
     /app/logs \
     /app/cache
 
@@ -67,9 +62,12 @@ RUN useradd -m -u 1000 dna && \
     chown -R dna:dna /app
 USER dna
 
-# Default command - run pattern mining
-CMD ["python", "scripts/run_pattern_mining.py", "--help"]
+# Expose port
+EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import dna; from dna import SpectralDNA; print('OK')" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start web server
+CMD ["python", "app.py"]

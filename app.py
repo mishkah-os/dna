@@ -8,6 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pathlib import Path
 import uvicorn
+import sys
+
+# Add src to python path to allow importing dna package
+sys.path.append("src")
 
 from api import models, experiments, patterns
 from database.db import init_database

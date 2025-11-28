@@ -1,5 +1,10 @@
 # 🧬 DNA: Neural Network Pattern Discovery System
 
+> [!NOTE]
+> **Web Application Available!**
+> This project now includes a full web-based dashboard.
+> See **[WEB_SETUP.md](WEB_SETUP.md)** for installation and running instructions.
+
 <div dir="rtl">
 
 ## نظام اكتشاف الأنماط في الشبكات العصبية
@@ -66,25 +71,22 @@ Weights → SVD → Smaller            Weights → Manifold Geometry
 
 ## 🚀 Quick Start
 
-### Installation
+### Web Application (Recommended)
+
+See **[WEB_SETUP.md](WEB_SETUP.md)** for the modern web dashboard.
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/dna.git
-cd dna
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or: venv\Scripts\activate  # Windows
-
-# Install dependencies
-pip install -r requirements.txt
+python app.py
+# Open http://localhost:8000
 ```
 
-### Run Complete Pipeline (5 minutes)
+### CLI Mode (Legacy)
 
 ```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run pattern mining
 python scripts/run_pattern_mining.py --model huawei-noah/TinyBERT_General_4L_312D
 ```
 
@@ -109,14 +111,22 @@ This will:
 ```
 dna/
 │
+├── app.py                            # Web Application Entry Point
+├── WEB_SETUP.md                      # Web Setup Guide
+├── README.md                         # This file
+│
 ├── src/dna/                          # Core library
 │   ├── siren.py                      # SIREN networks (SpectralDNA, Hierarchical, Adaptive)
 │   ├── weight_dataset.py             # Coordinate transformation & dataset
 │   ├── pattern_miner.py              # Training engine with PSNR metrics
 │   └── pattern_visualizer.py         # 9+ visualization types
 │
+├── api/                              # REST API
+├── static/                           # Frontend Assets
+├── database/                         # Database Layer
+│
 ├── scripts/
-│   └── run_pattern_mining.py         # Complete end-to-end pipeline
+│   └── run_pattern_mining.py         # CLI pipeline
 │
 ├── docs/                             # Comprehensive documentation
 │   ├── ENGINEERING_MANIFESTO.md      # Philosophy: Intelligence as negative entropy
@@ -126,12 +136,7 @@ dna/
 │   ├── SIREN_PATTERN_MINING.md       # SIREN guide (Arabic)
 │   └── QUICKSTART.md                 # 5-minute getting started guide
 │
-├── tests/                            # Unit tests
-├── examples/                         # Usage examples
 └── pattern_mining_output/            # Results (created after running)
-    ├── checkpoints/                  # Trained DNA models
-    ├── visualizations/               # All plots and figures
-    └── data/                         # Extracted datasets
 ```
 
 ---
@@ -358,9 +363,9 @@ This project is based on rigorous mathematical foundations:
 
 </div>
 
-1. **[QUICKSTART.md](docs/QUICKSTART.md)** - Get started in 5 minutes
-   - Quick installation and first run
-   - Example outputs and interpretation
+1. **[WEB_SETUP.md](WEB_SETUP.md)** - Web Application Setup (Recommended)
+   - Installation and running instructions
+   - Dashboard features
 
 2. **[SIREN_PATTERN_MINING.md](docs/SIREN_PATTERN_MINING.md)** - Complete guide (Arabic)
    - Full system explanation

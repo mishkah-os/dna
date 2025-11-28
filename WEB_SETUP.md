@@ -1,22 +1,24 @@
-# 🧬 DNA Pattern Explorer
+# 🧬 DNA Pattern Explorer - Web Setup Guide
 
-Web application for exploring geometric patterns in ML model weights using SIREN-based pattern mining.
+This guide explains how to set up and run the **DNA Pattern Explorer** web application.
 
 ## Quick Start
 
-1. **Install Dependencies**
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Start Server**
+### 2. Start Server
 ```bash
 python app.py
 ```
 
-3. **Open Browser**
-- Dashboard: http://localhost:8000
-- API Docs: http://localhost:8000/api/docs
+### 3. Open Browser
+- **Dashboard**: http://localhost:8000
+- **API Docs**: http://localhost:8000/api/docs
+
+---
 
 ## Features
 
@@ -34,13 +36,17 @@ python app.py
 - ✅ Arabic/English support (RTL/LTR)
 - ✅ Dark/Light themes
 
+---
+
 ## Pages
 
 - `/` - Main dashboard
 - `/static/viz.html` - 3D Pattern Visualization
-- `/static/models.html` - Model Zoo (TODO)
-- `/static/patterns.html` - Pattern Analysis (TODO)
-- `/static/experiment.html` - Experiment Runner (TODO)
+- `/static/models.html` - Model Zoo
+- `/static/patterns.html` - Pattern Analysis
+- `/static/experiment.html` - Experiment Runner
+
+---
 
 ## API Endpoints
 
@@ -58,6 +64,8 @@ python app.py
 - `GET /api/patterns` - List patterns
 - `GET /api/patterns/{id}/viz` - Get 3D visualization data
 - `GET /api/patterns/compare` - Compare patterns
+
+---
 
 ## Architecture
 

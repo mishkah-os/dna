@@ -45,8 +45,8 @@ class DownloadRequest(BaseModel):
 
 
 # Model storage directory
-MODELS_DIR = Path(__file__).parent.parent / "models"
-MODELS_DIR.mkdir(exist_ok=True)
+MODELS_DIR = Path(__file__).parent.parent / "data" / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @router.get("/models", response_model=List[ModelResponse])

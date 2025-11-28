@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # DNA Pattern Explorer Web Application
+  dna-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dna-pattern-explorer:latest
+    container_name: dna-explorer-web
+    ports:
+      - "8000:8000"  # FastAPI web server
+    volumes:
+      - ./data:/app/data  # Database and uploaded models
+      - ./cache:/app/cache  # HuggingFace model cache
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/cache
+      - HF_HOME=/app/cache
+      - TORCH_HOME=/app/cache
+    command: python app.py
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    mem_limit: 8g
+    cpus: 4
+
+  # GPU-accelerated version (requires nvidia-docker)
+  dna-web-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dna-pattern-explorer:latest
+    container_name: dna-explorer-web-gpu
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/cache
+      - HF_HOME=/app/cache
+      - TORCH_HOME=/app/cache
+      - NVIDIA_VISIBLE_DEVICES=all
+    command: python app.py
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profile: ["gpu"]  # Only starts with --profile gpu
+
+  # Development container
+  dna-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dna-pattern-explorer:latest
+    container_name: dna-dev
+    ports:
+      - "8000:8000"  # Web server
+      - "8888:8888"  # Jupyter (if needed)
+    volumes:
+      - .:/app  # Mount entire project for live editing
+      - ./cache:/app/cache
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/cache
+      - HF_HOME=/app/cache
+    command: python app.py
+    stdin_open: true
+    tty: true
+    user: root  # Development convenience
+    profile: ["dev"]  # Only starts with --profile dev
+
+volumes:
+  data:
+  cache:
+  logs:

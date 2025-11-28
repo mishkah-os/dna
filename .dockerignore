@@ -1,0 +1,63 @@
+# .dockerignore for DNA Pattern Explorer
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Data (will be mounted as volumes)
+data/
+cache/
+logs/
+pattern_mining_output/
+
+# Old structure (not needed in container)
+dna/static/
+dna/lib/
+dna/projects/
+dna/docs/
+dna/examples/
+dna/scripts/
+
+# Testing
+tests/
+.pytest_cache/
+*.coverage
+htmlcov/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
