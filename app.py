@@ -34,10 +34,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
-static_path = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
-
 # Include API routers
 app.include_router(models.router, prefix="/api", tags=["models"])
 app.include_router(experiments.router, prefix="/api", tags=["experiments"])
@@ -49,7 +45,6 @@ async def startup_event():
     """Initialize database on startup"""
     await init_database()
     print("✅ Database initialized")
-    print("📂 Static files served from:", static_path)
 
 
 @app.on_event("shutdown")
@@ -58,25 +53,20 @@ async def shutdown_event():
     print("👋 Shutting down DNA Pattern Explorer")
 
 
-@app.get("/")
-async def root():
-    """Serve main dashboard"""
-    index_file = static_path / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return {"message": "DNA Pattern Explorer API", "docs": "/api/docs"}
-
-
 @app.get("/health")
 async def health():
     """Health check endpoint"""
     return {"status": "healthy", "service": "DNA Pattern Explorer"}
 
+# Mount static files to root (must be last to avoid shadowing API)
+static_path = Path(__file__).parent / "static"
+app.mount("/", StaticFiles(directory=str(static_path), html=True), name="static")
+
 
 if __name__ == "__main__":
     print("🚀 Starting DNA Pattern Explorer...")
-    print("📍 Dashboard: http://localhost:8000")
-    print("📚 API Docs: http://localhost:8000/api/docs")
+    print("📍 Dashboard: http://localhost:8058")
+    print("📚 API Docs: http://localhost:8058/api/docs")
     
     uvicorn.run(
         "app:app",
