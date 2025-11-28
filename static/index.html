@@ -113,41 +113,60 @@
         </div>
       </main>
     </div>
-
-    <script>
-      // Load stats on mount
-      async function loadDashboardData(ctx) {
-        try {
-          const [models, experiments, patterns] = await Promise.all([
-            API.models.list(),
-            API.experiments.list({ limit: 5 }),
-            API.patterns.list()
-          ]);
-
-          ctx.setState((state) => {
-            state.data.stats.models = models.length;
-            state.data.stats.experiments = experiments.length;
-            state.data.stats.patterns = patterns.length;
-            state.data.recentExperiments = experiments;
-            return state;
-          });
-        } catch (err) {
-          console.error('Failed to load dashboard data:', err);
-        }
-      }
-
-      // Auto-init
-      if (window.MishkahAuto && typeof window.MishkahAuto.ready === 'function') {
-        window.MishkahAuto.ready(function (M) {
-          const htmlxAttr = document.documentElement.getAttribute('data-htmlx');
-          if (htmlxAttr && M && M.app && typeof M.app.make === 'function') {
-            const app = M.app.make();
-            loadDashboardData(app);
-          }
-        });
-      }
-    </script>
   </template>
+
+  <!-- INITIALIZATION SCRIPT - OUTSIDE TEMPLATE -->
+  <script>
+    console.log('🟣 [APP INIT] Script loaded, waiting for MishkahAuto...');
+
+    // Load stats from API
+    async function loadDashboardData(app) {
+      console.log('📡 [loadDashboardData] Starting API calls...');
+      try {
+        const [models, experiments, patterns] = await Promise.all([
+          API.models.list(),
+          API.experiments.list({ limit: 5 }),
+          API.patterns.list()
+        ]);
+
+        console.log('📡 [loadDashboardData] API responses:', {
+          models: models.length,
+          experiments: experiments.length,
+          patterns: patterns.length
+        });
+
+        app.setState((state) => {
+          state.data.stats.models = models.length;
+          state.data.stats.experiments = experiments.length;
+          state.data.stats.patterns = patterns.length;
+          state.data.recentExperiments = experiments;
+          return state;
+        });
+
+        console.log('✅ [loadDashboardData] State updated successfully');
+      } catch (err) {
+        console.error('❌ [loadDashboardData] Failed:', err);
+      }
+    }
+
+    // Auto-init when Mishkah is ready
+    if (window.MishkahAuto && typeof window.MishkahAuto.ready === 'function') {
+      console.log('🟣 [APP INIT] MishkahAuto found, calling ready()...');
+      window.MishkahAuto.ready(function (M) {
+        console.log('🟣 [APP INIT] Ready callback fired, creating app...');
+        const htmlxAttr = document.documentElement.getAttribute('data-htmlx');
+        if (M && M.app && typeof M.app.make === 'function') {
+          const app = M.app.make();
+          console.log('🟣 [APP INIT] App created, loading dashboard data...');
+          loadDashboardData(app);
+        } else {
+          console.error('❌ [APP INIT] M.app.make not available!');
+        }
+      });
+    } else {
+      console.error('❌ [APP INIT] MishkahAuto not found!');
+    }
+  </script>
 </body>
 
 </html>
