@@ -1,6 +1,5 @@
 /**
- * Mishkah Lite - Emergency Restoration (with Debug Logging)
- * A minimal implementation of the Mishkah framework to restore functionality.
+ * Mishkah Lite - Emergency Restoration (with CSS Auto-Loading)
  */
 (function (window) {
     'use strict';
@@ -11,16 +10,15 @@
     const M = window.Mishkah = window.Mishkah || {};
     M.utils = M.utils || {};
     M.UI = M.UI || {};
-    M.DSL = M.DSL || {}; // Placeholder
+    M.DSL = M.DSL || {};
 
     console.log('🔵 [Mishkah] Created base structure:', M);
 
-    // Utils implementation for Plotly bridge
+    // Utils implementation
     M.utils.JSON = {
         parseSafe: (v) => {
-            try {
-                return JSON.parse(v);
-            } catch (e) {
+            try { return JSON.parse(v); }
+            catch (e) {
                 console.error('❌ [Mishkah.utils.JSON.parseSafe] Parse error:', e);
                 return null;
             }
@@ -31,11 +29,45 @@
 
     console.log('🔵 [Mishkah] Utils initialized');
 
-    // 2. Simple State & Renderer
+    // 2. CSS Auto-Loader
+    function loadCSS() {
+        const config = window.MishkahAutoConfig || {};
+        const cssType = config.css;
+
+        console.log('🎨 [CSS Loader] Config css type:', cssType);
+
+        if (cssType === 'mi' || cssType === 'tailwind') {
+            // Load Tailwind CSS
+            const tailwindLink = document.createElement('link');
+            tailwindLink.rel = 'stylesheet';
+            tailwindLink.href = 'https://cdn.jsdelivr.net/npm/tailwindcss@3.4.0/dist/tailwind.min.css';
+            document.head.appendChild(tailwindLink);
+            console.log('✅ [CSS Loader] Tailwind CSS loaded from CDN');
+        }
+
+        // Load custom CSS if specified
+        if (config.paths && config.paths.css) {
+            const customLink = document.createElement('link');
+            customLink.rel = 'stylesheet';
+            customLink.href = config.paths.css;
+            document.head.appendChild(customLink);
+            console.log('✅ [CSS Loader] Custom CSS loaded:', config.paths.css);
+        }
+    }
+
+    // Load CSS immediately
+    loadCSS();
+
+    // 3. App Implementation
     class MishkahApp {
         constructor() {
             console.log('🟢 [MishkahApp] Constructor called');
-            this.state = { data: {} };
+            this.state = {
+                data: {
+                    stats: { models: 0, experiments: 0, patterns: 0 },
+                    recentExperiments: []
+                }
+            };
             this.template = null;
             this.mountPoint = null;
         }
@@ -43,33 +75,40 @@
         init() {
             console.log('🟢 [MishkahApp.init] Starting initialization...');
 
-            // Load initial state from script tag
-            const dataScript = document.querySelector('script[data-m-data]');
-            console.log('🟢 [MishkahApp.init] Looking for data-m-data script:', dataScript);
+            // Find template first
+            const templateEl = document.getElementById('dna-dashboard');
+            console.log('🟢 [MishkahApp.init] Looking for template #dna-dashboard:', templateEl);
+
+            if (!templateEl) {
+                console.error('❌ [MishkahApp.init] Template #dna-dashboard NOT FOUND');
+                return;
+            }
+
+            // Load state from data-m-data INSIDE template
+            const dataScript = templateEl.content
+                ? templateEl.content.querySelector('script[data-m-data]')
+                : templateEl.querySelector('script[data-m-data]');
+
+            console.log('🟢 [MishkahApp.init] Looking for data-m-data inside template:', dataScript);
 
             if (dataScript) {
                 try {
                     const dataText = dataScript.textContent;
                     console.log('🟢 [MishkahApp.init] Script content:', dataText.substring(0, 100) + '...');
-                    this.state.data = JSON.parse(dataText);
+                    const parsedData = JSON.parse(dataText);
+                    // Merge with default state
+                    this.state.data = { ...this.state.data, ...parsedData };
                     console.log('✅ [MishkahApp.init] State loaded:', this.state.data);
                 } catch (e) {
                     console.error('❌ [MishkahApp.init] State parse error:', e);
                 }
             } else {
-                console.warn('⚠️ [MishkahApp.init] No data-m-data script found');
+                console.warn('⚠️ [MishkahApp.init] No data-m-data script found, using defaults');
             }
 
-            // Find template
-            const templateEl = document.getElementById('dna-dashboard');
-            console.log('🟢 [MishkahApp.init] Looking for template #dna-dashboard:', templateEl);
-
-            if (templateEl) {
-                this.template = templateEl.innerHTML;
-                console.log('✅ [MishkahApp.init] Template loaded, length:', this.template.length);
-            } else {
-                console.error('❌ [MishkahApp.init] Template #dna-dashboard NOT FOUND');
-            }
+            // Get template HTML
+            this.template = templateEl.innerHTML;
+            console.log('✅ [MishkahApp.init] Template loaded, length:', this.template.length);
 
             // Mount point
             this.mountPoint = document.getElementById('app');
@@ -85,7 +124,7 @@
         }
 
         setState(callback) {
-            console.log('🟡 [MishkahApp.setState] Called with callback:', callback);
+            console.log('🟡 [MishkahApp.setState] Called');
             try {
                 const newState = callback(this.state);
                 if (newState) {
@@ -98,67 +137,64 @@
             }
         }
 
-        // Basic Template Engine
         render() {
             console.log('🔷 [MishkahApp.render] Starting render...');
 
-            if (!this.template) {
-                console.error('❌ [MishkahApp.render] No template available');
-                return;
-            }
-
-            if (!this.mountPoint) {
-                console.error('❌ [MishkahApp.render] No mount point available');
+            if (!this.template || !this.mountPoint) {
+                console.error('❌ [MishkahApp.render] Missing template or mount point');
                 return;
             }
 
             let html = this.template;
-            console.log('🔷 [MishkahApp.render] Template HTML length:', html.length);
 
-            // 1. Interpolation {state.data.xxx}
+            // Interpolation {state.data.xxx}
             console.log('🔷 [MishkahApp.render] Starting interpolation...');
             let replacements = 0;
             html = html.replace(/\{([^}]+)\}/g, (match, key) => {
-                const path = key.trim().split('.');
+                const trimmed = key.trim();
+
+                // Skip JSON objects (multi-line)
+                if (trimmed.includes('\n') || trimmed.includes('{')) {
+                    return match;
+                }
+
+                const path = trimmed.split('.');
                 let val = this.state;
                 for (let p of path) {
                     if (p === 'state') continue;
                     val = val ? val[p] : '';
                 }
                 replacements++;
-                if (replacements <= 5) { // Log first 5 replacements
+                if (replacements <= 5) {
                     console.log(`  🔹 Replace "${match}" with "${val}"`);
                 }
-                return val !== undefined ? val : '';
+                return val !== undefined && val !== null ? val : '';
             });
-            console.log(`✅ [MishkahApp.render] Interpolation complete. ${replacements} replacements made.`);
+            console.log(`✅ [MishkahApp.render] ${replacements} replacements made`);
 
-            // 2. Inject
-            console.log('🔷 [MishkahApp.render] Injecting HTML into mount point...');
+            // Inject
+            console.log('🔷 [MishkahApp.render] Injecting HTML...');
             try {
                 this.mountPoint.innerHTML = html;
-                console.log('✅ [MishkahApp.render] HTML injected successfully');
+                console.log('✅ [MishkahApp.render] HTML injected');
             } catch (e) {
                 console.error('❌ [MishkahApp.render] Injection error:', e);
                 return;
             }
 
-            // 3. Post-process directives (x-if, x-for)
+            // Process directives
             console.log('🔷 [MishkahApp.render] Processing directives...');
             try {
                 this.processDirectives(this.mountPoint);
                 console.log('✅ [MishkahApp.render] Directives processed');
             } catch (e) {
-                console.error('❌ [MishkahApp.render] Directive processing error:', e);
+                console.error('❌ [MishkahApp.render] Directive error:', e);
             }
 
-            // 4. Hydrate Plotly if needed
-            console.log('🔷 [MishkahApp.render] Checking for Plotly hydration...');
+            // Plotly hydration
             if (M.UI.Plotly && M.UI.Plotly.hydrate) {
                 console.log('🔷 [MishkahApp.render] Calling Plotly.hydrate()...');
                 M.UI.Plotly.hydrate(this.mountPoint);
-            } else {
-                console.log('ℹ️ [MishkahApp.render] Plotly not available for hydration');
             }
 
             console.log('✅ [MishkahApp.render] Render complete!');
@@ -167,65 +203,48 @@
         processDirectives(root) {
             console.log('🔶 [processDirectives] Starting...');
 
-            // Handle x-if
+            // x-if
             const xIfElements = root.querySelectorAll('[x-if]');
             console.log(`🔶 [processDirectives] Found ${xIfElements.length} x-if elements`);
 
             xIfElements.forEach((el, i) => {
                 const cond = el.getAttribute('x-if');
-                console.log(`  🔸 Processing x-if[${i}]: "${cond}"`);
                 try {
                     const val = new Function('state', 'return ' + cond)(this.state);
-                    console.log(`    Result: ${val}`);
-                    if (!val) {
-                        console.log(`    Removing element (condition false)`);
-                        el.remove();
-                    }
+                    if (!val) el.remove();
                 } catch (e) {
-                    console.warn(`  ⚠️ x-if error for "${cond}":`, e);
+                    console.warn(`  ⚠️ x-if[${i}] error:`, e.message);
                 }
             });
 
-            // Handle x-for
+            // x-for
             const xForElements = root.querySelectorAll('[x-for]');
             console.log(`🔶 [processDirectives] Found ${xForElements.length} x-for elements`);
 
             xForElements.forEach((el, i) => {
                 const expr = el.getAttribute('x-for');
-                console.log(`  🔸 Processing x-for[${i}]: "${expr}"`);
-
                 try {
                     const [item, source] = expr.split(' in ').map(s => s.trim());
                     const listPath = source.replace('state.', '').split('.');
                     let list = this.state;
                     for (let p of listPath) list = list ? list[p] : [];
 
-                    console.log(`    List length: ${Array.isArray(list) ? list.length : 'NOT AN ARRAY'}`);
-
                     if (!Array.isArray(list) || list.length === 0) {
-                        console.log(`    Removing element (empty list)`);
                         el.remove();
                     }
                 } catch (e) {
-                    console.warn(`  ⚠️ x-for error for "${expr}":`, e);
+                    console.warn(`  ⚠️ x-for[${i}] error:`, e.message);
                 }
             });
 
-            // Handle x-class
+            // x-class
             const xClassElements = root.querySelectorAll('[x-class]');
-            console.log(`🔶 [processDirectives] Found ${xClassElements.length} x-class elements`);
-
-            xClassElements.forEach((el, i) => {
+            xClassElements.forEach((el) => {
                 const expr = el.getAttribute('x-class');
                 try {
                     const val = new Function('state', 'exp', 'return ' + expr)(this.state, {});
-                    if (val) {
-                        el.className = val;
-                        if (i < 3) console.log(`  🔸 Applied x-class[${i}]: "${val}"`);
-                    }
-                } catch (e) {
-                    if (i < 3) console.warn(`  ⚠️ x-class error:`, e);
-                }
+                    if (val) el.className = val;
+                } catch (e) { }
             });
 
             console.log('✅ [processDirectives] Complete');
@@ -237,21 +256,18 @@
         }
     }
 
-    // 3. App Factory
+    // 4. App Factory
     M.app = {
         make: function () {
             console.log('🟣 [Mishkah.app.make] Creating new app instance...');
             const app = new MishkahApp();
 
-            // Defer init to ensure DOM is ready
-            console.log('🟣 [Mishkah.app.make] Scheduling init() for next tick...');
             setTimeout(() => {
-                console.log('⏰ [Mishkah.app.make] Timeout fired, calling app.init()...');
+                console.log('⏰ [Mishkah.app.make] Calling app.init()...');
                 try {
                     app.init();
                 } catch (e) {
                     console.error('❌ [Mishkah.app.make] Init error:', e);
-                    console.error('Stack trace:', e.stack);
                 }
             }, 0);
 
@@ -262,39 +278,31 @@
 
     console.log('🔵 [Mishkah] App factory created');
 
-    // 4. Auto Loader
+    // 5. Auto Loader
     window.MishkahAuto = {
         ready: function (cb) {
             console.log('🟤 [MishkahAuto.ready] Called, readyState:', document.readyState);
             if (document.readyState === 'complete') {
-                console.log('🟤 [MishkahAuto.ready] Document already complete, calling callback immediately');
+                console.log('🟤 [MishkahAuto.ready] Calling callback immediately');
                 try {
                     cb(M);
                 } catch (e) {
                     console.error('❌ [MishkahAuto.ready] Callback error:', e);
-                    console.error('Stack trace:', e.stack);
                 }
             } else {
-                console.log('🟤 [MishkahAuto.ready] Waiting for window.load event...');
+                console.log('🟤 [MishkahAuto.ready] Waiting for window.load...');
                 window.addEventListener('load', () => {
-                    console.log('⏰ [MishkahAuto.ready] Load event fired, calling callback');
+                    console.log('⏰ [MishkahAuto.ready] Load event fired');
                     try {
                         cb(M);
                     } catch (e) {
                         console.error('❌ [MishkahAuto.ready] Callback error:', e);
-                        console.error('Stack trace:', e.stack);
                     }
                 });
             }
         }
     };
 
-    console.log('✅ [Mishkah] Initialization complete! MishkahAuto.ready available.');
-    console.log('📊 [Mishkah] Final structure:', {
-        utils: !!M.utils,
-        UI: !!M.UI,
-        app: !!M.app,
-        DSL: !!M.DSL
-    });
+    console.log('✅ [Mishkah] Initialization complete!');
 
 })(window);
