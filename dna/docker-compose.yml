@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # CPU-only pattern mining
+  dna-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dna-pattern-mining:latest
+    container_name: dna-pattern-mining-cpu
+    volumes:
+      - ./pattern_mining_output:/app/pattern_mining_output
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/cache
+      - HF_HOME=/app/cache
+      - TORCH_HOME=/app/cache
+    command: >
+      python scripts/run_pattern_mining.py
+      --model huawei-noah/TinyBERT_General_4L_312D
+      --dna-type hierarchical
+      --epochs 100
+      --device cpu
+    restart: unless-stopped
+    mem_limit: 8g
+    cpus: 4
+
+  # GPU-accelerated pattern mining (requires nvidia-docker)
+  dna-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dna-pattern-mining:latest
+    container_name: dna-pattern-mining-gpu
+    volumes:
+      - ./pattern_mining_output:/app/pattern_mining_output
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/cache
+      - HF_HOME=/app/cache
+      - TORCH_HOME=/app/cache
+      - NVIDIA_VISIBLE_DEVICES=all
+    command: >
+      python scripts/run_pattern_mining.py
+      --model huawei-noah/TinyBERT_General_4L_312D
+      --dna-type hierarchical
+      --epochs 100
+      --device cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # Development container with Jupyter
+  dna-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dna-pattern-mining:latest
+    container_name: dna-dev
+    volumes:
+      - .:/app
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_CACHE=/app/cache
+      - HF_HOME=/app/cache
+      - TORCH_HOME=/app/cache
+    ports:
+      - "8888:8888"  # Jupyter
+      - "6006:6006"  # TensorBoard (if needed)
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    user: root  # For development convenience
+
+volumes:
+  cache:
+  logs:
+  pattern_mining_output:
