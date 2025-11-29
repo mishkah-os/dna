@@ -170,66 +170,41 @@
           <p class="text-sm text-[var(--muted-foreground)]">{trans('quick.metrics.orders')}</p>
           <strong class="mt-1 block text-3xl font-semibold text-[var(--accent)]">
             {state.data.metrics.orders}
-          </strong>
-        </section>
-      </div>
-
-      <!-- Chart Controls: x-once directive (Mishkah-native solution!) -->
-      <div class="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-[var(--shadow)]">
-        <div class="flex flex-wrap items-center justify-end gap-2">
-          <button id="test-randomize"
-            class="flex items-center gap-2 rounded-full border-2 border-orange-500 bg-orange-100 dark:bg-orange-900 px-3 py-2 text-xs font-bold text-orange-700 dark:text-orange-200 shadow-md transition hover:shadow-lg cursor-pointer">
-            <span class="select-none" x-text="'🧪 TEST'"></span>
-          </button>
-          <button id="toggle-live-data"
-            class="flex items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--foreground)] shadow-[var(--shadow)] transition hover:shadow-lg cursor-pointer"
-            style="min-width: 120px;">
-            <span class="select-none" x-text="'بيانات حية'"></span>
-            <span id="live-indicator" class="text-[10px] font-bold"
-              :class="state.data.liveData && state.data.liveData.enabled ? 'text-green-500' : 'text-gray-400'"
-              x-text="state.data.liveData && state.data.liveData.enabled ? '● LIVE' : '○ OFF'"></span>
-          </button>
-        </div>
-      </div>
-
-      <figure class="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-[var(--shadow)]">
-        <header class="mb-4">
-          <div>
             <figcaption class="text-sm font-medium text-[var(--muted-foreground)]">
               {trans('quick.sales.title')}
             </figcaption>
             <p class="mt-1 text-xs text-[var(--muted-foreground)]">{trans('quick.sales.subtitle')}</p>
+      </div>
+      </header>
+      <canvas data-chart-auto="line" data-chart-type="line" data-chart-bind="data.analytics"
+        data-chart-height="{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}"
+        style="min-height:{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}px;height:{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}px;max-height:{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}px;"
+        id="quick-sales-chart"></canvas>
+      <p class="mt-3 text-xs text-[var(--muted-foreground)]" x-if="state.data.ui && state.data.ui.salesLegendKey">
+        {trans(state.data.ui.salesLegendKey)}
+      </p>
+      <div class="mt-5 grid gap-3 lg:grid-cols-2">
+        <article x-for="series in state.data.analytics.series" key="series.id"
+          class="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)]">
+          <div class="flex items-start gap-3">
+            <span class="mt-1 inline-block h-3 w-3 rounded-full bg-[var(--primary)]" data-series-swatch
+              data-series-id="{series.id}"></span>
+            <div>
+              <strong class="text-sm font-semibold">{trans(series.nameKey)}</strong>
+              <p class="text-xs text-[var(--muted-foreground)]">
+                {trans('quick.sales.latest')}: {currentAnalyticsMonth(state)} — {formatThousands(latestValue(series),
+                state.data.analytics.unit, state.env && state.env.lang)}
+              </p>
+            </div>
           </div>
-        </header>
-        <canvas data-chart-auto="line" data-chart-type="line" data-chart-bind="data.analytics"
-          data-chart-height="{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}"
-          style="min-height:{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}px;height:{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}px;max-height:{state.data.analytics.chart && state.data.analytics.chart.height ? state.data.analytics.chart.height : 320}px;"
-          id="quick-sales-chart"></canvas>
-        <p class="mt-3 text-xs text-[var(--muted-foreground)]" x-if="state.data.ui && state.data.ui.salesLegendKey">
-          {trans(state.data.ui.salesLegendKey)}
-        </p>
-        <div class="mt-5 grid gap-3 lg:grid-cols-2">
-          <article x-for="series in state.data.analytics.series" key="series.id"
-            class="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)]">
-            <div class="flex items-start gap-3">
-              <span class="mt-1 inline-block h-3 w-3 rounded-full bg-[var(--primary)]" data-series-swatch
-                data-series-id="{series.id}"></span>
-              <div>
-                <strong class="text-sm font-semibold">{trans(series.nameKey)}</strong>
-                <p class="text-xs text-[var(--muted-foreground)]">
-                  {trans('quick.sales.latest')}: {currentAnalyticsMonth(state)} — {formatThousands(latestValue(series),
-                  state.data.analytics.unit, state.env && state.env.lang)}
-                </p>
-              </div>
-            </div>
-            <div class="text-right">
-              <strong class="block text-sm font-semibold text-[var(--primary)]">
-                {formatThousands(sumSeries(series), state.data.analytics.unit, state.env && state.env.lang)}
-              </strong>
-              <span class="text-xs text-[var(--muted-foreground)]">{trans('quick.sales.yearly')}</span>
-            </div>
-          </article>
-        </div>
+          <div class="text-right">
+            <strong class="block text-sm font-semibold text-[var(--primary)]">
+              {formatThousands(sumSeries(series), state.data.analytics.unit, state.env && state.env.lang)}
+            </strong>
+            <span class="text-xs text-[var(--muted-foreground)]">{trans('quick.sales.yearly')}</span>
+          </div>
+        </article>
+      </div>
       </figure>
 
       <div data-m-key="countdown-container"
@@ -1131,69 +1106,39 @@
           if (prevAnalytics && Array.isArray(prevAnalytics.series)) {
             for (var p = 0; p < prevAnalytics.series.length; p += 1) {
               var entryPrev = prevAnalytics.series[p];
-              if (entryPrev && entryPrev.id) {
-                prevMap[entryPrev.id] = entryPrev;
+              analytics.unitLabelKey = analytics.unitLabelKey || 'quick.sales.unit';
+              analytics.chart = analytics.chart || {};
+              if (!analytics.chart.type) analytics.chart.type = 'line';
+              if (!analytics.chart.height) analytics.chart.height = 320;
+              if (!analytics.chart.titleKey) analytics.chart.titleKey = 'quick.sales.title';
+              analytics.autoSimulate = analytics.autoSimulate === false ? false : true;
+              analytics.updatedAt = new Date().toISOString();
+
+              var table = buildSalesTable(updatedSeries, months);
+              analytics.table = table;
+
+              next.data.metrics = next.data.metrics || {};
+              var averagePrice = computeAveragePrice(catalogMap);
+              var yearlyK = table.yearlyTotal || 0;
+              var revenueVariance = 0.9 + Math.random() * 0.25;
+              var revenue = Math.max(0, yearlyK * 1000 * revenueVariance);
+              var orderBase = revenue / Math.max(averagePrice, 1);
+              var orderVariance = 0.85 + Math.random() * 0.3;
+
+              next.data.metrics.revenue = Math.round(revenue);
+              next.data.metrics.orders = Math.max(1, Math.round(orderBase * orderVariance));
+
+              performed = true;
+            }, function (latest) {
+              var nextSnapshot = ensureHelperBindings(latest || null);
+              if (nextSnapshot) {
+                ensureCountdownLoop(nextSnapshot);
               }
-            }
-          }
-          var metricsSource = next.data.metrics && typeof next.data.metrics === 'object' ? next.data.metrics : null;
-          if ((!metricsSource || typeof metricsSource !== 'object') && prev && prev.data && typeof prev.data.metrics === 'object') {
-            metricsSource = prev.data.metrics;
-          }
-          var updatedSeries = [];
-          for (var index = 0; index < blueprint.length; index += 1) {
-            var base = blueprint[index];
-            if (!base || !base.id) continue;
-            var reference = prevMap[base.id];
-            var color = base.color || (reference && reference.color) || pickPaletteColor(index);
-            var shouldReuseValues = reusePrevious || options.bootstrap === true;
-            var seedValues = shouldReuseValues && reference ? reference.values : null;
-            var values = generateSalesSeries(seedValues, monthCount, metricsSource, catalogMap[base.id]);
-            updatedSeries.push({
-              id: base.id,
-              nameKey: base.nameKey || base.id,
-              color: color,
-              values: values
+              if (performed || (options.bootstrap && nextSnapshot)) {
+                console.log('[CHART-UPDATE] queueQuickDashboardHydration (after data commit, performed=' + performed + ')');
+                queueQuickDashboardHydration({ ctx: context, snapshot: nextSnapshot, immediate: true });
+              }
             });
-          }
-          if (!updatedSeries.length) return;
-
-          analytics.series = updatedSeries;
-          analytics.monthIndex = monthCount - 1;
-          analytics.unit = analytics.unit || 'K';
-          analytics.unitLabelKey = analytics.unitLabelKey || 'quick.sales.unit';
-          analytics.chart = analytics.chart || {};
-          if (!analytics.chart.type) analytics.chart.type = 'line';
-          if (!analytics.chart.height) analytics.chart.height = 320;
-          if (!analytics.chart.titleKey) analytics.chart.titleKey = 'quick.sales.title';
-          analytics.autoSimulate = analytics.autoSimulate === false ? false : true;
-          analytics.updatedAt = new Date().toISOString();
-
-          var table = buildSalesTable(updatedSeries, months);
-          analytics.table = table;
-
-          next.data.metrics = next.data.metrics || {};
-          var averagePrice = computeAveragePrice(catalogMap);
-          var yearlyK = table.yearlyTotal || 0;
-          var revenueVariance = 0.9 + Math.random() * 0.25;
-          var revenue = Math.max(0, yearlyK * 1000 * revenueVariance);
-          var orderBase = revenue / Math.max(averagePrice, 1);
-          var orderVariance = 0.85 + Math.random() * 0.3;
-
-          next.data.metrics.revenue = Math.round(revenue);
-          next.data.metrics.orders = Math.max(1, Math.round(orderBase * orderVariance));
-
-          performed = true;
-        }, function (latest) {
-          var nextSnapshot = ensureHelperBindings(latest || null);
-          if (nextSnapshot) {
-            ensureCountdownLoop(nextSnapshot);
-          }
-          if (performed || (options.bootstrap && nextSnapshot)) {
-            console.log('[CHART-UPDATE] queueQuickDashboardHydration (after data commit, performed=' + performed + ')');
-            queueQuickDashboardHydration({ ctx: context, snapshot: nextSnapshot, immediate: true });
-          }
-        });
 
         return performed;
       }
