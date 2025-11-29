@@ -77,6 +77,7 @@
     if (!tag) return null;
 
     var tagLower = tag.toLowerCase();
+    if (tagLower === 'button') return null;
 
     // 1. Legacy support: comp-Modal → Modal
     if (tagLower.indexOf('comp-') === 0) {
@@ -1864,7 +1865,13 @@
           console.warn('E_ELEMENT_UNSUPPORTED: لا يمكن إنشاء العنصر', node.tag, 'لأن DSL.h غير متوفر.');
           return null;
         }
+        if (node.tag === 'button') {
+          console.log('DEBUG: compileNode element button kids:', kids.length, kids);
+        }
         result = hFactory(node.tag, 'Custom', { attrs: attrs }, kids);
+        if (node.tag === 'button') {
+          console.log('DEBUG: compileNode element button result children:', result.children.length);
+        }
       } else {
         var family = node.family;
         var atom = node.atom;
