@@ -5,21 +5,14 @@
   <meta charset="utf-8" />
   <title>DNA Pattern Explorer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- 🌙 Mishkah Scaffold - أبسط إعداد ممكن -->
   <script>
-    window.MishkahAutoConfig = {
-      css: 'mi',
-      paths: {
-        utils: '/lib/mishkah-utils.js',
-        core: '/lib/mishkah.core.js',
-        ui: '/lib/mishkah-ui.js',
-        htmlx: '/lib/mishkah-htmlx.js',
-        css: '/lib/mishkah-css.css'
-      },
-      chart: { cdn: '/vendor/chart.umd.min.js' },
-      plotly: { cdn: 'https://cdn.plot.ly/plotly-2.29.1.min.js' }
-    };
+    window.__MISHKAH_CONFIG__ = { mode: 'dev', basePath: '/lib/' };
   </script>
-  <script src="/lib/mishkah.js" data-htmlx data-css="mi"></script>
+  <script src="/lib/mishkah.scaffold.js"></script>
+
+  <!-- Additional Scripts -->
   <script src="/lib/mishkah-plotly.js"></script>
   <script src="/js/api.js"></script>
 </head>
@@ -79,35 +72,36 @@
         <div class="mb-6 grid gap-4 sm:grid-cols-3">
           <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
             <p class="text-sm text-[var(--muted-foreground)]">Models</p>
-            <strong class="block text-3xl font-bold text-[var(--primary)]">{state.data.stats.models}</strong>
+            <strong class="block text-3xl font-bold text-[var(--primary)]">{{data.stats.models}}</strong>
           </div>
           <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
             <p class="text-sm text-[var(--muted-foreground)]">Experiments</p>
-            <strong class="block text-3xl font-bold text-[var(--accent)]">{state.data.stats.experiments}</strong>
+            <strong class="block text-3xl font-bold text-[var(--accent)]">{{data.stats.experiments}}</strong>
           </div>
           <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
             <p class="text-sm text-[var(--muted-foreground)]">Patterns</p>
-            <strong class="block text-3xl font-bold text-[var(--secondary)]">{state.data.stats.patterns}</strong>
+            <strong class="block text-3xl font-bold text-[var(--secondary)]">{{data.stats.patterns}}</strong>
           </div>
         </div>
 
         <!-- Recent Experiments -->
         <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
           <h2 class="mb-4 text-xl font-semibold">Recent Experiments</h2>
-          <div x-if="state.data.recentExperiments.length > 0" class="space-y-2">
-            <div x-for="exp in state.data.recentExperiments" key="exp.id"
+          <div x-if="data.recentExperiments && data.recentExperiments.length > 0" class="space-y-2">
+            <div x-for="exp in data.recentExperiments" :key="exp.id"
               class="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-1)] p-4">
               <div>
-                <strong class="font-medium">{exp.name}</strong>
-                <p class="text-sm text-[var(--muted-foreground)]">{exp.model_name}</p>
+                <strong class="font-medium">{{exp.name}}</strong>
+                <p class="text-sm text-[var(--muted-foreground)]">{{exp.model_name}}</p>
               </div>
               <span class="rounded-full px-3 py-1 text-xs font-medium"
-                x-class="exp.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'">
-                {exp.status}
+                :class="exp.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'">
+                {{exp.status}}
               </span>
             </div>
           </div>
-          <p x-if="state.data.recentExperiments.length === 0" class="text-center text-[var(--muted-foreground)]">
+          <p x-if="!data.recentExperiments || data.recentExperiments.length === 0"
+            class="text-center text-[var(--muted-foreground)]">
             No experiments yet. Start your first experiment!
           </p>
         </div>
@@ -115,13 +109,10 @@
     </div>
   </template>
 
-  <!-- INITIALIZATION SCRIPT - OUTSIDE TEMPLATE -->
+  <!-- 🚀 App Initialization - أبسط كود ممكن -->
   <script>
-    console.log('🟣 [APP INIT] Script loaded, waiting for MishkahAuto...');
-
-    // Load stats from API
-    async function loadDashboardData(app) {
-      console.log('📡 [loadDashboardData] Starting API calls...');
+    // تحميل البيانات من API
+    async function loadDashboardData() {
       try {
         const [models, experiments, patterns] = await Promise.all([
           API.models.list(),
@@ -129,43 +120,40 @@
           API.patterns.list()
         ]);
 
-        console.log('📡 [loadDashboardData] API responses:', {
-          models: models.length,
-          experiments: experiments.length,
-          patterns: patterns.length
-        });
-
-        app.setState((state) => {
-          state.data.stats.models = models.length;
-          state.data.stats.experiments = experiments.length;
-          state.data.stats.patterns = patterns.length;
-          state.data.recentExperiments = experiments;
-          return state;
-        });
-
-        console.log('✅ [loadDashboardData] State updated successfully');
+        // تحديث الحالة
+        const app = M.HTMLx.apps['dna-dashboard'];
+        if (app) {
+          app.setState({
+            data: {
+              stats: {
+                models: models.length,
+                experiments: experiments.length,
+                patterns: patterns.length
+              },
+              recentExperiments: experiments
+            }
+          });
+          console.log('✅ Dashboard data loaded');
+        }
       } catch (err) {
-        console.error('❌ [loadDashboardData] Failed:', err);
+        console.error('❌ Failed to load data:', err);
       }
     }
 
-    // Auto-init when Mishkah is ready
-    if (window.MishkahAuto && typeof window.MishkahAuto.ready === 'function') {
-      console.log('🟣 [APP INIT] MishkahAuto found, calling ready()...');
-      window.MishkahAuto.ready(function (M) {
-        console.log('🟣 [APP INIT] Ready callback fired, creating app...');
-        const htmlxAttr = document.documentElement.getAttribute('data-htmlx');
-        if (M && M.app && typeof M.app.make === 'function') {
-          const app = M.app.make();
-          console.log('🟣 [APP INIT] App created, loading dashboard data...');
-          loadDashboardData(app);
-        } else {
-          console.error('❌ [APP INIT] M.app.make not available!');
-        }
-      });
-    } else {
-      console.error('❌ [APP INIT] MishkahAuto not found!');
-    }
+    // انتظر جهوزية Mishkah
+    window.addEventListener('mishkah:ready', function () {
+      console.log('🌙 Mishkah ready!');
+
+      // تهيئة التطبيق
+      if (M && M.HTMLx && M.HTMLx.mount) {
+        M.HTMLx.mount('dna-dashboard', '#app');
+
+        // تحميل البيانات
+        setTimeout(loadDashboardData, 500);
+      } else {
+        console.error('❌ M.HTMLx.mount not available');
+      }
+    });
   </script>
 </body>
 
