@@ -1478,13 +1478,256 @@
         }
 
         tryInit();
+
+        console.log('[DEBUG] Context has:', {
+          order: typeof context.order,
+          setOrders: typeof context.setOrders,
+          getOrders: typeof context.getOrders
+        });
+
+        // Try using setOrders
+        if (context.setOrders && typeof context.setOrders === 'function') {
+          console.log('[DEBUG] Registering order via ctx.setOrders');
+          var orders = context.getOrders ? context.getOrders() : {};
+          orders.click = orders.click || {};
+          orders.click['toggle-live-data'] = function (detail) {
+            console.log('[DEBUG] Live data toggle clicked via setOrders!', detail);
+            toggleLiveData(detail.event, context);
+          };
+          orders.click['test-randomize'] = function (detail) {
+            console.log('[DEBUG] Test randomize clicked via setOrders!', detail);
+            testRandomize(detail.event, context);
+          };
+          context.setOrders(orders);
+          console.log('[DEBUG] Orders registered successfully (toggle + test)');
+        } else if (context.order && typeof context.order === 'function') {
+          console.log('[DEBUG] Registering order via ctx.order');
+          context.order('click', { gkey: 'toggle-live-data' }, function (detail) {
+            console.log('[DEBUG] Live data toggle clicked via order!', detail);
+            toggleLiveData(detail.event, context);
+          });
+          context.order('click', { gkey: 'test-randomize' }, function (detail) {
+            console.log('[DEBUG] Test randomize clicked via order!', detail);
+            testRandomize(detail.event, context);
+          });
+        } else if (window.Mishkah && window.Mishkah.orders && typeof window.Mishkah.orders.on === 'function') {
+          console.log('[DEBUG] Registering order via Mishkah.orders.on');
+          window.Mishkah.orders.on('click', { gkey: 'toggle-live-data' }, function (detail) {
+            console.log('[DEBUG] Live data toggle clicked via Mishkah.orders!', detail);
+            toggleLiveData(detail.event, context);
+          });
+          window.Mishkah.orders.on('click', { gkey: 'test-randomize' }, function (detail) {
+            console.log('[DEBUG] Test randomize clicked via Mishkah.orders!', detail);
+            testRandomize(detail.event, context);
+          });
+        } else {
+          console.error('[DEBUG] No order system available!');
+        }
+      }
+
+      // TEST: Direct randomize function
+      function testRandomize(event, ctx) {
+        console.log('[TEST] ========== TEST RANDOMIZE CLICKED ==========');
+        var context = ctx || window.MishkahAuto || null;
+        if (!context) {
+          console.error('[TEST] No context available!');
+          return;
+        }
+
+        console.log('[TEST] Calling randomizeSalesReport with force=true...');
+        var result = randomizeSalesReport(event, context, { force: true, reusePrevious: false });
+        console.log('[TEST] randomizeSalesReport returned:', result);
+
+        // Force a manual sync
+        console.log('[TEST] Manually calling syncSalesChart...');
+        var state = context.getState ? context.getState() : context.state;
+        var syncResult = syncSalesChart(state, context);
+        console.log('[TEST] syncSalesChart returned:', syncResult);
+
+        console.log('[TEST] ========== TEST RANDOMIZE END ==========');
+      }
+
+      function quickDashboardMount(app, helpers) {
+        console.log('[DEBUG] quickDashboardMount called, app:', app, 'helpers:', helpers);
+        var ctx = app || (helpers && helpers.app) || window.MishkahAuto || null;
+        var auto = window.MishkahAuto || null;
+        var target = ctx || auto;
+
+        if (!target) {
+          console.error('[DEBUG] No context available for mount!');
+          return;
+        }
+
+        // SINGLE connectAutoState call - avoid duplicate listeners
+        console.log('[DEBUG] Connecting auto state ONCE for target');
+        connectAutoState(target);
+
+        // Attach direct event listeners to pure HTML buttons
+        setTimeout(function () {
+          var testBtn = document.getElementById('test-randomize');
+          var liveBtn = document.getElementById('toggle-live-data');
+
+          if (testBtn) {
+            testBtn.addEventListener('click', function (e) {
+              console.log('[BTN] TEST button clicked!');
+              testRandomize(e, target);
+            });
+            console.log('[DEBUG] ✓ TEST button handler attached');
+          }
+
+          if (liveBtn) {
+            liveBtn.addEventListener('click', function (e) {
+              console.log('[BTN] Live data button clicked!');
+              toggleLiveData(e, target);
+            });
+            console.log('[DEBUG] ✓ Live data button handler attached');
+          }
+        }, 50);
+
+        // Get initial state
+        var initial = resolveAutoState(target);
+        if (!initial && typeof target.getState === 'function') {
+          try {
+            initial = target.getState();
+          } catch (_err) {
+            initial = target.state || null;
+          }
+        }
+        initial = ensureHelperBindings(initial || null);
+
+        // Update initial indicator state
+        setTimeout(function () {
+          var enabled = initial && initial.data && initial.data.liveData && initial.data.liveData.enabled;
+          updateLiveDataIndicator(enabled || false);
+        }, 100);
+
+        // SINGLE bootstrap call
+        var seeded = randomizeSalesReport(null, target, { snapshot: initial || null, bootstrap: true });
+        if (!seeded && initial) {
+          ensureCountdownLoop(initial);
+        }
+
+        // SINGLE queueQuickDashboardHydration call
+        // After this, onState listener (from connectAutoState) handles updates
+        queueQuickDashboardHydration({ ctx: target, snapshot: initial || null, immediate: true });
+      }
+
+      // Countdown directive implementation with retry mechanism
+      function initCountdownDirectives(retryCount) {
+        var maxRetries = retryCount != null ? retryCount : 10;
+        var attempt = 0;
+
+        function tryInit() {
+          console.log('[DEBUG] initCountdownDirectives attempt', attempt + 1);
+          var countdownElements = document.querySelectorAll('[data-countdown]');
+          console.log('[DEBUG] Found', countdownElements.length, 'countdown elements');
+
+          if (countdownElements.length === 0 && attempt < maxRetries) {
+            attempt++;
+            setTimeout(tryInit, 100);
+            return;
+          }
+
+          countdownElements.forEach(function (element) {
+            // Clear any existing interval to prevent duplicates
+            if (element.__countdownInterval) {
+              clearInterval(element.__countdownInterval);
+              element.__countdownInterval = null;
+            }
+
+            // Get initial values from data attributes
+            var initialSeconds = Number(element.getAttribute('data-countdown')) || 270;
+            var baseline = Number(element.dataset.countdownBaseline) || initialSeconds;
+            var template = element.getAttribute('data-countdown-template') || '{{time}}';
+
+            console.log('[DEBUG] Initializing countdown: initial=' + initialSeconds + ', baseline=' + baseline);
+
+            // Use internal state
+            var currentSeconds = initialSeconds;
+
+            var updateCountdown = function () {
+              if (currentSeconds <= 0) {
+                currentSeconds = baseline;
+                try {
+                  element.dispatchEvent(new CustomEvent('countdown:finished'));
+                } catch (e) { }
+              }
+
+              // Update display
+              var minutes = Math.floor(currentSeconds / 60);
+              var seconds = currentSeconds % 60;
+              var timeStr = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+              var displayText = template.replace('{{time}}', timeStr);
+
+              element.textContent = displayText;
+              currentSeconds--;
+            };
+
+            // Initial render
+            updateCountdown();
+
+            // Start interval
+            element.__countdownInterval = setInterval(updateCountdown, 1000);
+            console.log('[✓] Countdown started successfully!');
+          });
+        }
+
+        tryInit();
       }
 
       // Note: fixButtonContent removed - Flatten Children fix in mishkah.core.js resolves nested array bug
       // Button children now render correctly via HTMLx without manual DOM manipulation
 
+      // Helper Functions
+      function formatCurrency(value, currency, lang) {
+        if (value == null) return '';
+        var opts = { style: 'currency', currency: currency || 'USD' };
+        try {
+          return new Intl.NumberFormat(lang === 'ar' ? 'ar-SA' : 'en-US', opts).format(value);
+        } catch (e) {
+          return value + ' ' + currency;
+        }
+      }
+
+      function formatThousands(value, unit, lang) {
+        if (value == null) return '';
+        try {
+          var formatted = new Intl.NumberFormat(lang === 'ar' ? 'ar-SA' : 'en-US').format(value);
+          return unit ? (lang === 'ar' ? formatted + ' ' + unit : unit + formatted) : formatted;
+        } catch (e) {
+          return value;
+        }
+      }
+
+      function currentAnalyticsMonth(state) {
+        var analytics = state && state.data && state.data.analytics;
+        if (!analytics) return '';
+        var months = analytics.months && analytics.months[state.env.lang || 'en'];
+        var index = analytics.monthIndex != null ? analytics.monthIndex : 11;
+        return (months && months[index]) || '';
+      }
+
+      function latestValue(series) {
+        if (!series || !Array.isArray(series.values) || !series.values.length) return 0;
+        return series.values[series.values.length - 1];
+      }
+
+      function sumSeries(series) {
+        if (!series || !Array.isArray(series.values)) return 0;
+        return series.values.reduce(function (a, b) { return a + (Number(b) || 0); }, 0);
+      }
+
       // __init__ hook - called automatically by HTMLx after mount
       function __init__(app, helpers) {
+        // Inject helpers into state so they are available in expressions
+        if (app && app.state) {
+          app.state.formatCurrency = formatCurrency;
+          app.state.formatThousands = formatThousands;
+          app.state.currentAnalyticsMonth = currentAnalyticsMonth;
+          app.state.latestValue = latestValue;
+          app.state.sumSeries = sumSeries;
+        }
+
         setTimeout(function () {
           quickDashboardMount(app, helpers);
 
