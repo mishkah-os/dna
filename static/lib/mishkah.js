@@ -1320,10 +1320,236 @@
         if (readyEvent) {
           doc.dispatchEvent(readyEvent);
         }
-      } catch (_err) {}
+      } catch (_err) { }
       return M;
-    }).catch(function () {});
+    }).catch(function () { });
   }
+
+  global.Mishka = host;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔌 Plugin Registry System - نظام إدارة الإضافات
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  var PluginRegistry = (function () {
+    var plugins = {};
+    var loaded = new Set();
+    var loading = new Map();
+
+    // تسجيل إضافة جديدة
+    function register(name, config) {
+      if (!name || typeof name !== 'string') return false;
+      plugins[name] = {
+        name: name,
+        url: config.url || null,
+        loader: config.loader || null,
+        test: config.test || null,
+        dependencies: config.dependencies || [],
+        optional: config.optional !== false
+      };
+      return true;
+    }
+
+    // التحقق من توفر إضافة
+    function isAvailable(name) {
+      if (!name || !plugins[name]) return false;
+      var plugin = plugins[name];
+      if (plugin.test && typeof plugin.test === 'function') {
+        return plugin.test();
+      }
+      return loaded.has(name);
+    }
+
+    // تحميل إضافة
+    function load(name) {
+      if (!name || !plugins[name]) {
+        return Promise.reject(new Error('Plugin not registered: ' + name));
+      }
+
+      if (isAvailable(name)) {
+        return Promise.resolve(true);
+      }
+
+      if (loading.has(name)) {
+        return loading.get(name);
+      }
+
+      var plugin = plugins[name];
+
+      // تحميل المتطلبات أولاً
+      var depsPromise = Promise.all(
+        (plugin.dependencies || []).map(function (dep) {
+          return load(dep);
+        })
+      );
+
+      var promise = depsPromise.then(function () {
+        if (plugin.loader && typeof plugin.loader === 'function') {
+          return plugin.loader();
+        }
+
+        if (plugin.url) {
+          return loadPluginScript(plugin.url);
+        }
+
+        return Promise.reject(new Error('No loader or URL for plugin: ' + name));
+      }).then(function () {
+        loaded.add(name);
+        loading.delete(name);
+        if (global.console && console.log) {
+          console.log('[Mishkah Plugin] ✓ Loaded: ' + name);
+        }
+        return true;
+      }).catch(function (err) {
+        loading.delete(name);
+        if (global.console && console.error) {
+          console.error('[Mishkah Plugin] ✗ Failed to load: ' + name, err);
+        }
+        throw err;
+      });
+
+      loading.set(name, promise);
+      return promise;
+    }
+
+    // تحميل سكريبت
+    function loadPluginScript(url) {
+      return new Promise(function (resolve, reject) {
+        if (!doc || typeof doc.createElement !== 'function') {
+          reject(new Error('Document not available'));
+          return;
+        }
+
+        var script = doc.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.setAttribute('data-mishkah-plugin', url);
+
+        script.onload = function () {
+          resolve(true);
+        };
+
+        script.onerror = function (err) {
+          reject(new Error('Failed to load script: ' + url));
+        };
+
+        doc.head.appendChild(script);
+      });
+    }
+
+    // الحصول على قائمة الإضافات
+    function list() {
+      return Object.keys(plugins).map(function (name) {
+        return {
+          name: name,
+          loaded: loaded.has(name),
+          loading: loading.has(name),
+          available: isAvailable(name)
+        };
+      });
+    }
+
+    return {
+      register: register,
+      load: load,
+      isAvailable: isAvailable,
+      list: list
+    };
+  })();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📦 تسجيل الإضافات الافتراضية
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Plotly Plugin
+  PluginRegistry.register('plotly', {
+    url: baseUrl + 'mishkah-plotly.js',
+    test: function () {
+      return !!(global.Mishkah && global.Mishkah.UI && global.Mishkah.UI.Plotly);
+    },
+    optional: true
+  });
+
+  // Store Plugin
+  PluginRegistry.register('store', {
+    url: baseUrl + 'mishkah.store.js',
+    test: function () {
+      return typeof global.createStore === 'function';
+    },
+    optional: true
+  });
+
+  // Simple Store Plugin
+  PluginRegistry.register('simple-store', {
+    url: baseUrl + 'mishkah.simple-store.js',
+    test: function () {
+      return typeof global.createSimpleStore === 'function';
+    },
+    optional: true,
+    dependencies: ['store']
+  });
+
+  // CRUD Plugin
+  PluginRegistry.register('crud', {
+    url: baseUrl + 'mishkah.crud.js',
+    test: function () {
+      return !!(global.Mishkah && global.Mishkah.CRUD);
+    },
+    optional: true
+  });
+
+  // Pages Plugin
+  PluginRegistry.register('pages', {
+    url: baseUrl + 'mishkah.pages.js',
+    test: function () {
+      return !!(global.Mishkah && global.Mishkah.Pages);
+    },
+    optional: true
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🚀 Auto-detect وتحميل Plugins عند الحاجة
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function detectRequiredPlugins() {
+    var required = [];
+
+    // كشف Plotly من data-m-plotly
+    if (doc && doc.querySelector && doc.querySelector('[data-m-plotly]')) {
+      required.push('plotly');
+    }
+
+    return required;
+  }
+
+  function autoLoadPlugins() {
+    var required = detectRequiredPlugins();
+    if (required.length === 0) return Promise.resolve([]);
+
+    return Promise.all(required.map(function (name) {
+      return PluginRegistry.load(name).catch(function (err) {
+        if (global.console && console.warn) {
+          console.warn('[Mishkah] Optional plugin failed to load: ' + name, err);
+        }
+        return null;
+      });
+    }));
+  }
+
+  // تنفيذ Auto-load بعد جهوزية النظام
+  api.whenReady.then(function () {
+    // تأجيل بسيط للسماح للـ DOM بالتحديث
+    setTimeout(function () {
+      autoLoadPlugins();
+    }, 100);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔌 تصدير Plugin API
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  api.plugins = PluginRegistry;
+  host.plugins = PluginRegistry;
 
   global.Mishka = host;
 })(typeof window !== 'undefined' ? window : this);
