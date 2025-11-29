@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-htmlx="main" data-css-library="mi" data-theme="dark">
+
+<head>
+    <meta charset="utf-8">
+    <title>Test HTMLx</title>
+    <script src="../lib/mishkah.js" data-htmlx data-debug="true" data-dev="true"></script>
+    <script>
+        (function () {
+            if (window.MishkahAuto && typeof window.MishkahAuto.ready === 'function') {
+                window.MishkahAuto.ready(function (M) {
+                    var htmlxAttr = document.documentElement.getAttribute('data-htmlx');
+                    if (htmlxAttr && M && M.app && typeof M.app.make === 'function') {
+                        M.app.make();
+                    }
+                });
+            }
+        })();
+    </script>
+</head>
+
+<body>
+    <div id="app"></div>
+
+    <template id="main">
+        <script type="application/json" data-m-path="env">
+      {"theme":"dark","lang":"ar","dir":"rtl"}
+    </script>
+
+        <script type="application/json" data-m-path="data">
+      {"count":0}
+    </script>
+
+        <script type="application/json" data-m-path="i18n.dict">
+      {
+        "title": {"ar":"اختبار HTMLx","en":"HTMLx Test"},
+        "theme": {"ar":"السمة","en":"Theme"},
+        "lang": {"ar":"اللغة","en":"Language"},
+        "count": {"ar":"العدد","en":"Count"},
+        "increment": {"ar":"زيادة","en":"Increment"}
+      }
+    </script>
+
+        <div class="p-8">
+            <div class="max-w-md mx-auto p-6 bg-white dark:bg-slate-800 rounded-lg shadow">
+                <h1 class="text-2xl font-bold mb-6 text-slate-900 dark:text-white">{t('title')}</h1>
+
+                <div class="space-y-4">
+                    <div class="flex gap-2">
+                        <button onclick="toggleTheme(event, ctx)"
+                            class="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded">
+                            <span>ICON</span> {t('theme')}: {state.env.theme}
+                        </button>
+
+                        <button onclick="toggleLang(event, ctx)"
+                            class="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded">
+                            <span>TEST</span> {t('lang')}: {state.env.lang}
+                        </button>
+                    </div>
+
+                    <div class="p-4 bg-gray-100 dark:bg-slate-700 rounded">
+                        <p class="text-lg text-slate-900 dark:text-white mb-3">
+                            {t('count')}: <span class="font-bold text-purple-600">{state.data.count}</span>
+                        </p>
+                        <button onclick="increment(event, ctx)"
+                            class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded">
+                            {t('increment')} +1
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function toggleTheme(e, ctx) {
+                ctx.setState(function (s) {
+                    s.env.theme = s.env.theme === 'dark' ? 'light' : 'dark';
+                    document.documentElement.setAttribute('data-theme', s.env.theme);
+                    if (s.env.theme === 'dark') {
+                        document.documentElement.classList.add('dark');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                    }
+                    return s;
+                });
+            }
+
+            function toggleLang(e, ctx) {
+                ctx.setState(function (s) {
+                    s.env.lang = s.env.lang === 'ar' ? 'en' : 'ar';
+                    s.env.dir = s.env.lang === 'ar' ? 'rtl' : 'ltr';
+                    s.i18n.lang = s.env.lang;
+                    document.documentElement.setAttribute('lang', s.env.lang);
+                    document.documentElement.setAttribute('dir', s.env.dir);
+                    return s;
+                });
+            }
+
+            function increment(e, ctx) {
+                ctx.setState(function (s) {
+                    s.data.count++;
+                    return s;
+                });
+            }
+        </script>
+    </template>
+</body>
+
+</html>
