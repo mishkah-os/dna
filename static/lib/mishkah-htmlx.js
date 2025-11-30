@@ -94,13 +94,21 @@
     var componentName = pascalCase(tag);
 
     // تحقق من وجود المكون في Mishkah.UI
-    if (Mishkah && Mishkah.UI && typeof Mishkah.UI[componentName] === 'function') {
-      return componentName;
-    }
+    if (Mishkah && Mishkah.UI) {
+      // 1. Exact match (e.g. "Button")
+      if (typeof Mishkah.UI[componentName] === 'function') {
+        return componentName;
+      }
 
-    // تحقق إذا كان الوسم نفسه موجود (حالة PascalCase مباشرة)
-    if (tag !== tagLower && Mishkah && Mishkah.UI && typeof Mishkah.UI[tag] === 'function') {
-      return tag;
+      // 2. Case-insensitive search (e.g. "THEMETOGGLEICON" -> "ThemeToggleIcon")
+      // هذا يحل مشكلة تحويل المتصفح للأسماء إلى أحرف كبيرة
+      var uiKeys = Object.keys(Mishkah.UI);
+      var tagUpper = tag.toUpperCase();
+      for (var i = 0; i < uiKeys.length; i++) {
+        if (uiKeys[i].toUpperCase() === tagUpper) {
+          return uiKeys[i];
+        }
+      }
     }
 
     return null;
@@ -1846,18 +1854,34 @@
       }
       var result;
       if (node.type === 'component') {
+        console.log('[HTMLx COMPILE] Component:', node.component);
+        console.log('[HTMLx COMPILE] activeScope.UI?', !!activeScope.UI, 'Keys:', activeScope.UI ? Object.keys(activeScope.UI).slice(0, 10) : []);
+
         var componentFactory = activeScope.UI[node.component];
+        console.log('[HTMLx COMPILE] Factory type:', typeof componentFactory);
+
         if (typeof componentFactory !== 'function') {
-          console.warn('E_COMPONENT_NOT_FOUND: component', node.component, 'غير متوفر.');
+          console.warn('[HTMLx COMPILE] ✗ Component not found:', node.component);
+          console.warn('[HTMLx COMPILE] Available:', Object.keys(activeScope.UI || {}));
           return null;
         }
+
+        console.log('[HTMLx COMPILE] ✓ Rendering component:', node.component);
         var props = { attrs: attrs };
         if (kids.length === 1) {
           props.content = kids[0];
         } else if (kids.length > 1) {
           props.content = kids;
         }
-        result = componentFactory(props);
+        var result_component = componentFactory(props);
+        console.log('[HTMLx COMPILE] Component rendered:', !!result_component);
+
+        // ✨ الحل: لو في children ولم تستخدم، هويستهم كـ siblings
+        if (kids && kids.length > 0) {
+          result = [result_component].concat(kids);
+        } else {
+          result = result_component;
+        }
       } else if (node.type === 'element') {
         var hFactory = (activeScope.D && typeof activeScope.D.h === 'function') ? activeScope.D.h
           : (Mishkah && Mishkah.DSL && typeof Mishkah.DSL.h === 'function' ? Mishkah.DSL.h : null);

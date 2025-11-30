@@ -21,19 +21,7 @@
     };
   </script>
   <script src="lib/mishkah.js" data-htmlx data-css="env"></script>
-  <script>
-    // Auto-init for data-htmlx (os repo doesn't support this natively)
-    (function () {
-      if (window.MishkahAuto && typeof window.MishkahAuto.ready === 'function') {
-        window.MishkahAuto.ready(function (M) {
-          var htmlxAttr = document.documentElement.getAttribute('data-htmlx');
-          if (htmlxAttr && M && M.app && typeof M.app.make === 'function') {
-            M.app.make();
-          }
-        });
-      }
-    })();
-  </script>
+
 </head>
 
 <body class="bg-[var(--background)] text-[var(--foreground)]">
@@ -1508,23 +1496,6 @@
       }
     </script>
   </template>
-</body>
-
-</html>
-// Note: fixButtonContent removed - Flatten Children fix in mishkah.core.js resolves nested array bug
-// Button children now render correctly via HTMLx without manual DOM manipulation
-
-// __init__ hook - called automatically by HTMLx after mount
-function __init__(app, helpers) {
-setTimeout(function () {
-quickDashboardMount(app, helpers);
-
-// Initialize countdown directives with retry mechanism
-initCountdownDirectives();
-}, 16);
-}
-</script>
-</template>
 </body>
 
 </html>

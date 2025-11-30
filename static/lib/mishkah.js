@@ -511,311 +511,8 @@
     return function () { autoState.listeners.delete(listener); };
   }
 
-  /*
-    function ensureComponentStyles() {
-      if (doc.getElementById('mishkah-scaffold-styles')) return;
-      var style = doc.createElement('style');
-      style.id = 'mishkah-scaffold-styles';
-      style.setAttribute('data-mishkah-auto', '1');
-      style.textContent = "" +
-        '.mk-switcher{display:inline-flex;align-items:center;gap:var(--mk-space-1,0.25rem);padding:var(--mk-space-1,0.25rem);' +
-        'border:1px solid var(--mk-border,rgba(148,163,184,0.35));border-radius:999px;background:var(--mk-surface-1,rgba(148,163,184,0.12));' +
-        'box-shadow:var(--mk-shadow-soft,0 12px 24px rgba(15,23,42,0.12));transition:background 160ms var(--mk-ease,ease-out);}' +
-        '.mk-switcher__btn{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:2.6rem;' +
-        'padding:0.35rem 0.85rem;border-radius:999px;font-size:0.85rem;font-weight:600;border:none;background:transparent;' +
-        'color:var(--mk-muted,#94a3b8);transition:color 160ms var(--mk-ease,ease-out),background 160ms var(--mk-ease,ease-out),transform 150ms var(--mk-ease,ease-out);}' +
-        '.mk-switcher__btn:hover{color:var(--mk-fg,#e2e8f0);}' +
-        '.mk-switcher__btn.is-active{background:var(--mk-primary,#2aa5a0);color:var(--mk-primary-contrast,#071314);box-shadow:0 10px 30px rgba(42,165,160,0.35);transform:translateY(-1px);}' +
-        '.mk-select{display:inline-flex;align-items:center;gap:var(--mk-space-2,0.5rem);padding:0.45rem 0.75rem;border-radius:var(--mk-radius-md,0.75rem);' +
-        'border:1px solid var(--mk-border,rgba(148,163,184,0.35));background:var(--mk-surface-0,rgba(15,23,42,0.55));color:var(--mk-fg,#e2e8f0);' +
-        'font-size:0.9rem;min-width:6.5rem;box-shadow:var(--mk-shadow-soft,0 12px 24px rgba(15,23,42,0.12));transition:border 150ms var(--mk-ease,ease-out),box-shadow 150ms var(--mk-ease,ease-out);}' +
-        '.mk-select:focus{outline:none;border-color:color-mix(in oklab,var(--mk-primary,#2aa5a0) 60%, transparent);box-shadow:0 0 0 3px color-mix(in oklab,var(--mk-primary,#2aa5a0) 25%, transparent);}' +
-        '.mk-label{display:inline-flex;flex-direction:column;gap:var(--mk-space-1,0.25rem);font-size:0.75rem;color:var(--mk-muted,#94a3b8);}' +
-        '.mk-switcher__hint{font-size:0.7rem;color:var(--mk-muted,#94a3b8);margin-inline-start:0.35rem;}' +
-        '.mk-select option{color:inherit;background:var(--mk-surface-0,#0f172a);}' +
-        '.mk-switcher--themes .mk-switcher__btn{min-width:3.1rem;}' +
-        '';
-      doc.head.appendChild(style);
-    }
-  */
 
-  function parseLangsAttr(node, limit) {
-    var attr = node.getAttribute('langs');
-    var list = attr ? toList(attr) : [];
-    if (!list.length && Array.isArray(userConfig.defaultLangs)) {
-      list = userConfig.defaultLangs.slice();
-    }
-    if (!list.length) list = ['ar', 'en'];
-    var seen = new Set();
-    var normalized = [];
-    list.forEach(function (lang) {
-      var key = normalizeLang(lang);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      normalized.push(key);
-    });
-    if (typeof limit === 'number' && normalized.length > limit) {
-      normalized.length = limit;
-    }
-    return normalized;
-  }
 
-  function parseThemesAttr(node, fallback) {
-    var attr = node.getAttribute('themes');
-    var list = attr ? toList(attr) : [];
-    if (!list.length && Array.isArray(userConfig.defaultThemes)) {
-      list = userConfig.defaultThemes.slice();
-    }
-    if (!list.length && Array.isArray(fallback)) list = fallback.slice();
-    if (!list.length) list = ['light', 'dark'];
-    var seen = new Set();
-    var normalized = [];
-    list.forEach(function (theme) {
-      var key = String(theme || '').toLowerCase();
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      normalized.push(key);
-    });
-    return normalized;
-  }
-
-  /*
-    function makeButton(label, value, clickHandler) {
-      var btn = doc.createElement('button');
-      btn.type = 'button';
-      btn.className = 'mk-switcher__btn';
-      btn.textContent = label;
-      btn.dataset.value = value;
-      btn.addEventListener('click', clickHandler);
-      return btn;
-    }
-  
-    function makeSelect(options, valueChange, role) {
-      var select = doc.createElement('select');
-      select.className = 'mk-select';
-      if (role) select.setAttribute('aria-label', role);
-      options.forEach(function (entry) {
-        var option = doc.createElement('option');
-        option.value = entry.value;
-        option.textContent = entry.label;
-        select.appendChild(option);
-      });
-      select.addEventListener('change', function (event) {
-        valueChange(event.target.value);
-      });
-      return select;
-    }
-  */
-
-  /*
-    function defineComponent(name, ctor) {
-      if (!global.customElements || !name) return;
-      if (global.customElements.get(name)) return;
-      try {
-        global.customElements.define(name, ctor);
-      } catch (err) {
-        if (global.console && console.warn) console.warn('[MishkahAuto] failed to define component', name, err);
-      }
-    }
-  
-    function BaseComponent() {
-      var self = Reflect.construct(HTMLElement, [], this.constructor);
-      self.__cleanup = null;
-      self.__connected = false;
-      return self;
-    }
-    BaseComponent.prototype = Object.create(HTMLElement.prototype);
-    BaseComponent.prototype.constructor = BaseComponent;
-    BaseComponent.prototype.connectedCallback = function () {
-      this.__connected = true;
-      // ensureComponentStyles();
-      this.render();
-      var self = this;
-      this.__cleanup = onState(function () { self.sync(); });
-    };
-    BaseComponent.prototype.disconnectedCallback = function () {
-      this.__connected = false;
-      if (typeof this.__cleanup === 'function') this.__cleanup();
-      this.__cleanup = null;
-    };
-    BaseComponent.prototype.attributeChangedCallback = function () {
-      if (!this.__connected) return;
-      this.render();
-    };
-    BaseComponent.prototype.render = function () { };
-    BaseComponent.prototype.sync = function () { };
-  
-    function LangSwitcher() {
-      return BaseComponent.call(this) || this;
-    }
-    LangSwitcher.prototype = Object.create(BaseComponent.prototype);
-    LangSwitcher.prototype.constructor = LangSwitcher;
-    LangSwitcher.observedAttributes = ['langs'];
-    LangSwitcher.prototype.render = function () {
-      var _this = this;
-      var languages = parseLangsAttr(this, 2);
-      this.innerHTML = '';
-      var wrapper = doc.createElement('div');
-      wrapper.className = 'mk-switcher mk-switcher--langs';
-      this._buttons = [];
-      languages.forEach(function (lang) {
-        var button = makeButton(formatLabel(LANG_LABELS, lang), lang, function () {
-          performSetLang(lang);
-        });
-        _this._buttons.push(button);
-        wrapper.appendChild(button);
-      });
-      if (!languages.length) {
-        var fallback = makeButton('AR', 'ar', function () { performSetLang('ar'); });
-        this._buttons.push(fallback);
-        wrapper.appendChild(fallback);
-      }
-      this.appendChild(wrapper);
-      this.sync();
-    };
-    LangSwitcher.prototype.sync = function () {
-      var state = autoState.currentState;
-      if (!state || !this._buttons) return;
-      var current = (state.env && state.env.lang) || (state.i18n && state.i18n.lang) || null;
-      this._buttons.forEach(function (button) {
-        var active = button.dataset.value === current;
-        if (active) button.classList.add('is-active');
-        else button.classList.remove('is-active');
-      });
-    };
-  
-    function LangSelect() {
-      return BaseComponent.call(this) || this;
-    }
-    LangSelect.prototype = Object.create(BaseComponent.prototype);
-    LangSelect.prototype.constructor = LangSelect;
-    LangSelect.observedAttributes = ['langs'];
-    LangSelect.prototype.render = function () {
-      var languages = parseLangsAttr(this);
-      var options = languages.map(function (lang) {
-        return { value: lang, label: formatLabel(LANG_LABELS, lang) };
-      });
-      if (!options.length) {
-        options = [
-          { value: 'ar', label: formatLabel(LANG_LABELS, 'ar') },
-          { value: 'en', label: formatLabel(LANG_LABELS, 'en') }
-        ];
-      }
-      this.innerHTML = '';
-      var labelText = this.getAttribute('label') || '';
-      var container = doc.createElement('label');
-      container.className = labelText ? 'mk-label' : '';
-      if (labelText) {
-        var title = doc.createElement('span');
-        title.textContent = labelText;
-        container.appendChild(title);
-      }
-      var select = makeSelect(options, function (value) {
-        performSetLang(value);
-      }, labelText || 'Language');
-      this._select = select;
-      container.appendChild(select);
-      this.appendChild(container);
-      this.sync();
-    };
-    LangSelect.prototype.sync = function () {
-      if (!this._select) return;
-      var state = autoState.currentState;
-      if (!state) return;
-      var current = (state.env && state.env.lang) || (state.i18n && state.i18n.lang) || '';
-      if (current && this._select.value !== current) {
-        this._select.value = current;
-      }
-    };
-  
-    function ThemeSwitcher() {
-      return BaseComponent.call(this) || this;
-    }
-    ThemeSwitcher.prototype = Object.create(BaseComponent.prototype);
-    ThemeSwitcher.prototype.constructor = ThemeSwitcher;
-    ThemeSwitcher.observedAttributes = ['themes'];
-    ThemeSwitcher.prototype.render = function () {
-      var _this = this;
-      var themes = parseThemesAttr(this, ['light', 'dark']);
-      this.innerHTML = '';
-      var wrapper = doc.createElement('div');
-      wrapper.className = 'mk-switcher mk-switcher--themes';
-      this._buttons = [];
-      themes.forEach(function (theme) {
-        var button = makeButton(formatLabel(THEME_LABELS, theme), theme, function () {
-          performSetTheme(theme);
-        });
-        _this._buttons.push(button);
-        wrapper.appendChild(button);
-      });
-      if (!themes.length) {
-        var fallback = makeButton(formatLabel(THEME_LABELS, 'light'), 'light', function () { performSetTheme('light'); });
-        this._buttons.push(fallback);
-        wrapper.appendChild(fallback);
-      }
-      this.appendChild(wrapper);
-      this.sync();
-    };
-    ThemeSwitcher.prototype.sync = function () {
-      var state = autoState.currentState;
-      if (!state || !this._buttons) return;
-      var current = state.env && state.env.theme;
-      this._buttons.forEach(function (button) {
-        var active = button.dataset.value === current;
-        if (active) button.classList.add('is-active');
-        else button.classList.remove('is-active');
-      });
-    };
-  
-    function ThemeSelect() {
-      return BaseComponent.call(this) || this;
-    }
-    ThemeSelect.prototype = Object.create(BaseComponent.prototype);
-    ThemeSelect.prototype.constructor = ThemeSelect;
-    ThemeSelect.observedAttributes = ['themes'];
-    ThemeSelect.prototype.render = function () {
-      var themes = parseThemesAttr(this);
-      var options = themes.map(function (theme) {
-        return { value: theme, label: formatLabel(THEME_LABELS, theme) };
-      });
-      if (!options.length) {
-        options = [
-          { value: 'light', label: formatLabel(THEME_LABELS, 'light') },
-          { value: 'dark', label: formatLabel(THEME_LABELS, 'dark') }
-        ];
-      }
-      this.innerHTML = '';
-      var labelText = this.getAttribute('label') || '';
-      var container = doc.createElement('label');
-      container.className = labelText ? 'mk-label' : '';
-      if (labelText) {
-        var title = doc.createElement('span');
-        title.textContent = labelText;
-        container.appendChild(title);
-      }
-      var select = makeSelect(options, function (value) {
-        performSetTheme(value);
-      }, labelText || 'Theme');
-      this._select = select;
-      container.appendChild(select);
-      this.appendChild(container);
-      this.sync();
-    };
-    ThemeSelect.prototype.sync = function () {
-      if (!this._select) return;
-      var state = autoState.currentState;
-      if (!state) return;
-      var current = state.env && state.env.theme;
-      if (current && this._select.value !== current) {
-        this._select.value = current;
-      }
-    };
-  
-    defineComponent('lang-switcher', LangSwitcher);
-    defineComponent('lang-select', LangSelect);
-    defineComponent('theme-switcher', ThemeSwitcher);
-    defineComponent('theme-select', ThemeSelect);
-  */
   function mergeOrders(existing, autoOrders) {
     var merged = Object.assign({}, autoOrders || {});
     if (existing && typeof existing === 'object') {
@@ -922,6 +619,17 @@
       var attach = function (app) {
         applyTwcssAuto(app, database);
         attachApp(app);
+
+        // Auto-bind ChartBridge if available
+        if (M.UI && M.UI.ChartBridge) {
+          if (typeof M.UI.ChartBridge.bindApp === 'function') {
+            M.UI.ChartBridge.bindApp(app);
+          }
+          if (typeof M.UI.ChartBridge.hydrate === 'function') {
+            M.UI.ChartBridge.hydrate();
+          }
+        }
+
         return app;
       };
       if (result && typeof result.then === 'function') {
@@ -987,6 +695,13 @@
     if (typeof M.app.make === 'function') {
       patchAppMake(M);
       markReady(M);
+
+      // Auto-Init for data-htmlx
+      var htmlxAttr = doc.documentElement.getAttribute('data-htmlx');
+      var hasTemplate = !!doc.querySelector('template[id]');
+      if (htmlxAttr || hasTemplate) {
+        M.app.make();
+      }
       return;
     }
     watchAppMake(M);
@@ -1465,6 +1180,12 @@
   // ═══════════════════════════════════════════════════════════════════════════
   // 📦 تسجيل الإضافات الافتراضية
   // ═══════════════════════════════════════════════════════════════════════════
+  // Chart.js Plugin
+  PluginRegistry.register('chartjs', {
+    url: (userConfig.chart && userConfig.chart.cdn) ? joinBase(userConfig.chart.cdn) : 'https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js',
+    test: function () { return !!global.Chart; },
+    optional: true
+  });
 
   // Plotly Plugin
   PluginRegistry.register('plotly', {
@@ -1522,6 +1243,11 @@
     // كشف Plotly من data-m-plotly
     if (doc && doc.querySelector && doc.querySelector('[data-m-plotly]')) {
       required.push('plotly');
+    }
+
+    // كشف Chart.js
+    if ((doc && doc.documentElement.hasAttribute('data-chartjs')) || (doc.querySelector && doc.querySelector('[data-chart-type], canvas[data-m-chart]'))) {
+      required.push('chartjs');
     }
 
     return required;
