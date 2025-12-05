@@ -1612,6 +1612,13 @@
       };
     }
     if (Array.isArray(value)) {
+      // Optimization: Single expression segment -> return raw value (preserves booleans)
+      if (value.length === 1 && value[0].type === 'expr') {
+        var singleCode = value[0].code;
+        return function (scope) {
+          return evaluateExpression(singleCode, scope);
+        };
+      }
       var segments = value.map(function (token) {
         if (token.type === 'text') {
           var text = token.value;

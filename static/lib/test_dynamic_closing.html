@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Closing Tags Test</title>
+    <style>
+        body {
+            font-family: system-ui;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            padding: 20px;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            margin: 5px;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+    <script src="mishkah.core.js"></script>
+    <script src="mishkah-react.js"></script>
+</head>
+
+<body>
+
+    <h1>🧪 Dynamic Closing Tags Test</h1>
+
+    <div id="app"></div>
+
+    <script>
+        const { render, useState, html } = Mishkah.React;
+        const M = Mishkah;
+
+        // Define UI Components
+        M.UI = M.UI || {};
+
+        M.UI.Card = ({ title }, children) => {
+            return M.h('div', 'Containers', { attrs: { class: 'card' } }, [
+                M.h('h2', 'Text', {}, [title]),
+                M.h('hr', 'Containers', {}, []),
+                ...children
+            ]);
+        };
+
+        M.UI.Button = ({ variant = 'primary', onclick }, children) => {
+            const className = `btn btn-${variant}`;
+            return M.h('button', 'Forms', {
+                attrs: { class: className },
+                events: { click: onclick }
+            }, children || []);
+        };
+
+        // Test Component
+        function App() {
+            const [count, setCount] = useState(0);
+            const [status, setStatus] = useState('Waiting for test...');
+
+            function increment() {
+                setCount(c => c + 1);
+                setStatus('✅ Dynamic closing tags working!');
+            }
+
+            function reset() {
+                setCount(0);
+                setStatus('Reset successful!');
+            }
+
+            // الاختبار الحقيقي: استخدام </${Component}> syntax
+            return html`
+                <${M.UI.Card} title="Dynamic Closing Tags Test">
+                    <p>Count: <strong>${count}</strong></p>
+                    
+                    <div>
+                        <${M.UI.Button} variant="primary" onclick=${increment}>
+                            Increment
+                        </${M.UI.Button}>
+                        
+                        <${M.UI.Button} variant="success" onclick=${reset}>
+                            Reset
+                        </${M.UI.Button}>
+                    </div>
+                    
+                    <div class="status">
+                        <strong>Status:</strong> ${status}
+                    </div>
+                    
+                    <p style="margin-top: 20px; font-size: 0.9em; color: #666;">
+                        <em>
+                            This test uses <code>&lt;\${Component}&gt;...&lt;/\${Component}&gt;</code> syntax.
+                            If you see this message and the buttons work, the fix is successful! 🎉
+                        </em>
+                    </p>
+                </${M.UI.Card}>
+            `;
+        }
+
+        render(App, document.getElementById('app'));
+    </script>
+
+</body>
+
+</html>

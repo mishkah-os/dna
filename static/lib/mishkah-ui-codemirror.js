@@ -17,7 +17,10 @@
     var M = existing || (global.Mishkah = {});
     if (!M.UI) M.UI = {};
 
-    var h = M.h || M.DSL || function () { console.warn('[CodeMirror] M.h not available'); return null; };
+    // Lazy access to h/DSL to handle async loading order
+    function getH() {
+        return M.h || M.DSL || (M.DSL && M.DSL.h) || function () { console.warn('[CodeMirror] M.h not available'); return null; };
+    }
 
     // ============================================================
     // CodeMirror Language Modes Map
@@ -133,14 +136,23 @@
         var readOnly = props.readOnly || false;
         var onChange = props.onChange || null;
         var height = props.height || '100%';
+        var style = props.style || '';
         var id = props.id || 'cm-' + Math.random().toString(36).substr(2, 9);
 
         // Container div
-        var container = h.Containers.Div({
+        var h = getH();
+
+        // Build style string
+        var containerStyle = 'height: ' + height + '; overflow: auto;';
+        if (style) {
+            containerStyle += ' ' + style;
+        }
+
+        var container = h('div', 'Containers', {
             attrs: {
                 id: id,
                 class: 'mishkah-codemirror-container',
-                style: 'height: ' + height + '; overflow: auto;',
+                style: containerStyle,
                 'data-cm-lang': lang,
                 'data-cm-theme': theme,
                 'data-cm-value': value,
@@ -156,7 +168,8 @@
                 lang: lang,
                 theme: theme,
                 readOnly: readOnly,
-                onChange: onChange
+                onChange: onChange,
+                customStyle: style  // Pass custom style
             });
         }, 0);
 
@@ -176,15 +189,39 @@
             return;
         }
 
+        // Check if instance already exists
+        if (instances.has(containerId)) {
+            var existing = instances.get(containerId);
+            // Update existing instance instead of creating new one
+
+            // Only update if value has changed to prevent cursor jumping
+            var newValue = config.value || '';
+            if (existing.getValue() !== newValue) {
+                existing.setValue(newValue);
+            }
+
+            await ensureMode(config.lang);
+            var langInfo = LANGUAGE_MODES[config.lang.toLowerCase()] || { mode: 'javascript' };
+            existing.setOption('mode', langInfo.mode);
+            existing.refresh();
+            return existing;
+        }
+
+        // Clear container to prevent duplicates
+        container.innerHTML = '';
+
         // Ensure CodeMirror is loaded
         await ensureCodeMirror();
         await ensureMode(config.lang);
 
         var langInfo = LANGUAGE_MODES[config.lang.toLowerCase()] || { mode: 'javascript' };
 
+        // Ensure value is a string
+        var safeValue = typeof config.value === 'string' ? config.value : String(config.value || '');
+
         // Create CodeMirror instance
         var editor = global.CodeMirror(container, {
-            value: config.value || '',
+            value: safeValue,
             mode: langInfo.mode,
             theme: config.theme || 'dracula',
             lineNumbers: true,
@@ -199,6 +236,22 @@
             readOnly: config.readOnly || false,
             viewportMargin: Infinity
         });
+
+        // Apply custom style if provided
+        if (config.customStyle) {
+            var cmElement = container.querySelector('.CodeMirror');
+            if (cmElement) {
+                var styles = config.customStyle.split(';');
+                styles.forEach(function (style) {
+                    var parts = style.split(':');
+                    if (parts.length === 2) {
+                        var prop = parts[0].trim();
+                        var value = parts[1].trim();
+                        cmElement.style[prop] = value;
+                    }
+                });
+            }
+        }
 
         // Handle onChange
         if (config.onChange && typeof config.onChange === 'function') {

@@ -1404,7 +1404,7 @@
   UI.ThemeSwitch = UI.ThemeSwitcher;
   UI.LangSwitch = UI.LangSwitcher;
 
-  M.UI = UI;
+  M.UI = Object.assign(M.UI || {}, UI);
   M.UI.orders = Object.assign({}, ORDERS, POS_ORDERS);
   M.UI.posOrders = POS_ORDERS;
 
@@ -1742,5 +1742,3 @@
 
   U.UDM = MarkdownRenderer;
 })(window);
-
-

@@ -75,6 +75,8 @@
     : (typeof userConfig.tailwind === 'boolean' ? userConfig.tailwind : true);
 
   var storesFlag = parseDatasetFlag(parseDatasetValue('stores', null), undefined);
+  var indexeddbFlag = parseDatasetFlag(parseDatasetValue('indexeddb', null), undefined);
+
   var storesEnabled = (typeof storesFlag === 'boolean') ? storesFlag
     : (typeof userConfig.stores === 'boolean' ? userConfig.stores : false);
   var devtoolsFlag = parseDatasetFlag(parseDatasetValue('devtools', null), undefined);
@@ -88,6 +90,7 @@
   }
 
   var paths = userConfig.paths || {};
+  console.log(paths);
   var resources = [
     {
       id: 'mishkah-utils',
@@ -102,7 +105,7 @@
     {
       id: 'mishkah-ui',
       src: joinBase(paths.ui || 'mishkah-ui.js'),
-      test: function () { return global.Mishkah && global.Mishkah.UI; }
+      test: function () { return global.Mishkah && global.Mishkah.UI && global.Mishkah.UI.VStack; }
     },
     {
       id: 'mishkah-acorn',
@@ -143,6 +146,15 @@
     );
   }
 
+  if (indexeddbFlag) {
+    resources.push(
+      {
+        id: 'mishkah-indexeddb',
+        src: joinBase(paths.indexeddb || 'mishkah-indexeddb.js'),
+        test: function () { return typeof global.createIndexedDB === 'function'; }
+      }
+    );
+  }
   if (devtoolsEnabled) {
     resources.push({
       id: 'mishkah-devtools',
@@ -152,6 +164,7 @@
       }
     });
   }
+  console.log(resources);
 
   var cssHref = joinBase(paths.css || 'mishkah-css.css');
 
