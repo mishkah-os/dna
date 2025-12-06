@@ -63,6 +63,11 @@
         var options = instance.type;
         var publicThis = instance.ctx; // Setup context/proxy
 
+        // 0. Before Create
+        if (options.beforeCreate) {
+            options.beforeCreate.call(publicThis);
+        }
+
         if (!publicThis.$emit && instance.emit) {
             publicThis.$emit = instance.emit;
         }
@@ -128,9 +133,18 @@
         }
 
         // 5. Lifecycle
+        if (options.beforeMount) {
+            instance.beforeMount = instance.beforeMount || [];
+            instance.beforeMount.push(options.beforeMount.bind(publicThis));
+        }
         if (options.mounted) onMounted(options.mounted.bind(publicThis));
         if (options.updated) onUpdated(options.updated.bind(publicThis));
         if (options.unmounted) onUnmounted(options.unmounted.bind(publicThis));
+
+        // 6. Created
+        if (options.created) {
+            options.created.call(publicThis);
+        }
     }
     function handleSetupResult(instance, setupResult) { if (typeof setupResult === 'function') { instance.render = setupResult } else if (typeof setupResult === 'object') { instance.setupState = setupResult } finishComponentSetup(instance) }
     function finishComponentSetup(instance) { if (!instance.render) { instance.render = instance.type.render || instance.type.template } }
@@ -302,6 +316,50 @@
     // The Global Listener handles it.
     // So setupRenderEffect can just patch.
 
+    function updateSlots(instance, children) {
+        // Simple slot support: if children is array -> default slot
+        // If children is object -> named slots
+        instance.slots = instance.slots || {};
+        if (Array.isArray(children)) {
+            instance.slots.default = function () { return children };
+        } else if (typeof children === 'object' && children !== null) {
+            for (var key in children) {
+                var val = children[key];
+                instance.slots[key] = typeof val === 'function' ? val : function () { return val };
+            }
+        } else {
+            instance.slots.default = function () { return [] };
+        }
+    }
+
+    function setupComponent(instance) {
+        var emitFn = function (event) {
+            var args = [];
+            for (var _i = 1; _i < arguments.length; _i++) args[_i - 1] = arguments[_i];
+            emit(instance, event, args);
+        };
+
+        instance.emit = emitFn;
+        updateSlots(instance, instance.vnode.children); // Init slots
+
+        var setup = instance.type.setup;
+        if (setup) {
+            currentInstance = instance;
+            // Pass slots to setup context
+            var setupResult = setup(instance.type.props || {}, { emit: emitFn, slots: instance.slots });
+            currentInstance = null;
+            handleSetupResult(instance, setupResult);
+        } else {
+            // Options API
+            instance.ctx.$emit = emitFn;
+            instance.ctx.$slots = instance.slots;
+            applyOptions(instance);
+            finishComponentSetup(instance);
+        }
+    }
+
+    // ... setRefs ...
+
     function setupRenderEffect(instance, initialVNode, container) {
         instance.update = effect(function componentEffect() {
             if (!instance.isMounted) {
@@ -326,9 +384,16 @@
                 M.VDOM.patch(el ? el.parentNode : container, nextTree, prevTree, {}, {}, "");
                 instance.vnode.el = nextTree.el;
 
-                // Update Refs after patch
-                instance.refs = {}; // Clear old refs? Or merge? Vue 3 clears usually.
+                // Update Refs & Slots
+                instance.refs = {};
                 instance.ctx.$refs = instance.refs;
+                updateSlots(instance, instance.vnode.children);
+                // Note: instance.vnode should be the *new* vnode passed by parent update, 
+                // but currently setupRenderEffect is self-contained for state updates.
+                // Parent updates (props changing) is a missing piece in this simplified engine:
+                // The parent's patch would need to call `instance.update()` after updating instance.vnode.
+                // For now, this handles local state re-renders (slots don't change locally usually).
+
                 setRefs(instance, nextTree);
 
                 if (instance.updated) {
