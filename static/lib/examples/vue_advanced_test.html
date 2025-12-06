@@ -92,13 +92,17 @@
                     this.log('Received event from Child: ' + payload);
                 },
                 log(msg) {
-                    this.logs.push(msg);
+                    // Force update by replacing array (simple engine reactivity fix)
+                    this.logs = [].concat(this.logs, [msg]);
+                    console.log('App Log:', msg);
                 },
                 accessRef() {
+                    console.log('AccessRef called');
                     if (this.$refs.myInput) {
                         this.log('Ref accessed: value = ' + this.$refs.myInput.value);
                         this.$refs.myInput.focus();
                     } else {
+                        console.warn('Ref not found in accessRef');
                         this.log('Ref not found!');
                     }
                 }

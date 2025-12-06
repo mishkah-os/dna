@@ -301,13 +301,130 @@
     // Actually we can remove calls to attachEvents from setupRenderEffect?
     function setRefs(instance, vnode) {
         if (!vnode) return;
-        if (vnode.props && vnode.props.ref) {
-            instance.refs[vnode.props.ref] = vnode.el;
+
+        var el = vnode.el || vnode._dom;
+
+        if (vnode.props && vnode.props.ref && el) {
+            instance.refs[vnode.props.ref] = el;
+        } else if (vnode.attrs && vnode.attrs.ref && el) {
+            // Fallback if M.h put it in attrs
+            instance.refs[vnode.attrs.ref] = el;
         }
+
         if (vnode.children && Array.isArray(vnode.children)) {
             for (var i = 0; i < vnode.children.length; i++) {
                 setRefs(instance, vnode.children[i]);
             }
+        }
+    }
+
+    function expandComponentTree(vnode, parentInstance) {
+        if (!vnode) return vnode;
+
+        try {
+            // Handle Array of children
+            if (Array.isArray(vnode)) {
+                return vnode.map(function (c) { return expandComponentTree(c, parentInstance) });
+            }
+
+            // Resolve String Tags (from vnode.type OR vnode.tag)
+            // Mishkah Core vnode uses .tag (lowercased). Vue uses .type.
+            var tagToCheck = vnode.type;
+            if (typeof tagToCheck !== 'string' && typeof vnode.tag === 'string') {
+                tagToCheck = vnode.tag;
+            }
+
+            if (typeof tagToCheck === 'string' && parentInstance && parentInstance.type.components) {
+                var comps = parentInstance.type.components;
+                var found = comps[tagToCheck]; // Direct match
+
+                // Debug: Log only for our suspect
+                if (tagToCheck === 'childcomp' || tagToCheck === 'ChildComp') {
+                    console.log('MishkahVue: resolving', tagToCheck, 'FoundDirect:', !!found, 'Keys:', Object.keys(comps));
+                }
+
+                if (!found) {
+                    // Case-insensitive match (kebab or pascal vs lower)
+                    var lower = tagToCheck.toLowerCase();
+                    for (var key in comps) {
+                        if (key.toLowerCase() === lower ||
+                            key.replace(/-/g, '').toLowerCase() === lower) {
+                            found = comps[key];
+                            if (tagToCheck === 'childcomp') console.log('MishkahVue: Found Fuzzy:', key);
+                            break;
+                        }
+                    }
+                }
+
+                if (found) {
+                    vnode.type = found;
+                    // Important: If we switch type to object, we must ensure properties match what createComponentInstance expects.
+                    // It uses 'type', 'props', etc.
+                    // M.h puts props in vnode.props.
+                }
+            } else if ((tagToCheck === 'childcomp' || tagToCheck === 'ChildComp')) {
+                console.warn('MishkahVue: expand failed preconditions', {
+                    tag: tagToCheck,
+                    hasParent: !!parentInstance,
+                    hasType: parentInstance && !!parentInstance.type,
+                    hasComps: parentInstance && parentInstance.type && !!parentInstance.type.components
+                });
+            }
+
+            // If it's a Component VNode (now resolved)
+            if (typeof vnode.type === 'object') {
+                var instance = vnode.component;
+                if (!instance) {
+                    instance = vnode.component = createComponentInstance(vnode);
+                    // Inherit context/provides if needed?
+                    setupComponent(instance);
+                }
+
+                var subTree = renderComponentRoot(instance);
+                instance.subTree = subTree;
+
+                var expandedTree = expandComponentTree(subTree, instance);
+
+                // FORWARDING COMPONENT PROPS (Ref, Key, Class, Style -> Fallthrough)
+                if (expandedTree && typeof expandedTree === 'object') {
+                    // Forward Key
+                    if (vnode.key != null) expandedTree.key = vnode.key;
+                    // Forward Ref (append or overwrite?)
+                    if (vnode.props && vnode.props.ref) {
+                        // If root also has ref, we might lose one. Vue 3 merges refs? 
+                        // For now, Component ref takes precedence for the parent to see it.
+                        // Actually, we shouldn't modify expandedTree.props directly if it's shared?
+                        // But strictly it's a fresh VNode from render().
+                        expandedTree.props = expandedTree.props || {};
+                        expandedTree.props.ref = vnode.props.ref;
+                    }
+                    // Forward ID, Class, Style (Basic Fallthrough)
+                    if (vnode.props) {
+                        expandedTree.props = expandedTree.props || {};
+                        if (vnode.props.id) expandedTree.props.id = vnode.props.id;
+                        if (vnode.props.class) {
+                            expandedTree.props.class = (expandedTree.props.class || '') + ' ' + vnode.props.class;
+                        }
+                        // if (vnode.props.style) {
+                        //     // Merge styles?
+                        // }
+                    }
+                }
+
+                return expandedTree;
+            }
+
+            // If it's an Element VNode
+            if (vnode.children && Array.isArray(vnode.children)) {
+                for (var i = 0; i < vnode.children.length; i++) {
+                    vnode.children[i] = expandComponentTree(vnode.children[i], parentInstance);
+                }
+            }
+
+            return vnode;
+        } catch (e) {
+            console.error('MishkahVue: Error expanding component tree', e);
+            return null;
         }
     }
 
@@ -353,7 +470,12 @@
             // Options API
             instance.ctx.$emit = emitFn;
             instance.ctx.$slots = instance.slots;
+
+            // Set currentInstance so global helpers (onMounted, etc.) work within applyOptions
+            currentInstance = instance;
             applyOptions(instance);
+            currentInstance = null;
+
             finishComponentSetup(instance);
         }
     }
@@ -362,43 +484,58 @@
 
     function setupRenderEffect(instance, initialVNode, container) {
         instance.update = effect(function componentEffect() {
-            if (!instance.isMounted) {
-                var subTree = instance.subTree = renderComponentRoot(instance);
-                M.VDOM.patch(container, subTree, null, {}, {}, "");
-                initialVNode.el = subTree.el ? subTree.el : container.firstChild;
+            try {
+                if (!instance.isMounted) {
+                    // Before Mount Hook
+                    if (instance.beforeMount) {
+                        instance.beforeMount.forEach(function (hook) { hook() });
+                    }
 
-                // Set Refs after mount
-                instance.refs = {};
-                instance.ctx.$refs = instance.refs;
-                setRefs(instance, subTree);
+                    var rawSubTree = renderComponentRoot(instance);
+                    // Expand Components recursively
+                    var subTree = instance.subTree = expandComponentTree(rawSubTree, instance);
 
-                instance.isMounted = true;
-                if (instance.mounted) {
-                    instance.mounted.forEach(function (hook) { hook() })
+                    M.VDOM.patch(container, subTree, null, {}, {}, "");
+                    initialVNode.el = subTree.el || subTree._dom || container.firstChild;
+
+                    // Set Refs after mount
+                    instance.refs = {};
+                    instance.ctx.$refs = instance.refs;
+                    setRefs(instance, subTree);
+
+                    instance.isMounted = true;
+                    if (instance.mounted) {
+                        instance.mounted.forEach(function (hook) { hook() })
+                    }
+                } else {
+                    // ... update logic
+                    var rawNextTree = renderComponentRoot(instance);
+                    var nextTree = expandComponentTree(rawNextTree, instance);
+
+                    var prevTree = instance.subTree;
+                    instance.subTree = nextTree;
+                    var el = prevTree.el;
+                    M.VDOM.patch(el ? el.parentNode : container, nextTree, prevTree, {}, {}, "");
+                    instance.vnode.el = nextTree.el;
+
+                    // Update Refs & Slots
+                    instance.refs = {};
+                    instance.ctx.$refs = instance.refs;
+                    updateSlots(instance, instance.vnode.children);
+                    // Note: instance.vnode should be the *new* vnode passed by parent update, 
+                    // but currently setupRenderEffect is self-contained for state updates.
+                    // Parent updates (props changing) is a missing piece in this simplified engine:
+                    // The parent's patch would need to call `instance.update()` after updating instance.vnode.
+                    // For now, this handles local state re-renders (slots don't change locally usually).
+
+                    setRefs(instance, nextTree);
+
+                    if (instance.updated) {
+                        instance.updated.forEach(function (hook) { hook() })
+                    }
                 }
-            } else {
-                var nextTree = renderComponentRoot(instance);
-                var prevTree = instance.subTree;
-                instance.subTree = nextTree;
-                var el = prevTree.el;
-                M.VDOM.patch(el ? el.parentNode : container, nextTree, prevTree, {}, {}, "");
-                instance.vnode.el = nextTree.el;
-
-                // Update Refs & Slots
-                instance.refs = {};
-                instance.ctx.$refs = instance.refs;
-                updateSlots(instance, instance.vnode.children);
-                // Note: instance.vnode should be the *new* vnode passed by parent update, 
-                // but currently setupRenderEffect is self-contained for state updates.
-                // Parent updates (props changing) is a missing piece in this simplified engine:
-                // The parent's patch would need to call `instance.update()` after updating instance.vnode.
-                // For now, this handles local state re-renders (slots don't change locally usually).
-
-                setRefs(instance, nextTree);
-
-                if (instance.updated) {
-                    instance.updated.forEach(function (hook) { hook() })
-                }
+            } catch (e) {
+                console.error('MishkahVue: Render Error', e);
             }
         }, { scheduler: function () { queueJob(instance.update) } })
     }
