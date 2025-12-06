@@ -33,16 +33,14 @@
     var batchingUpdates = false;
     var pendingUpdates = [];
 
-    var fiberRegistry = new Map();
-    var activeFiberId = null;
-    var renderPath = '';
-    var patchScheduled = new Set();
-
+    // Context registry
     var contextRegistry = new Map();
     var contextIdCounter = 0;
 
+    // Portal registry
     var portalRegistry = [];
 
+    // Memoized components cache
     var memoCache = new WeakMap();
 
     var debugEnabled = false;
@@ -87,67 +85,6 @@
             }
         }
         return true;
-    }
-
-    function createFiber(id, type, props) {
-        return { id: id, type: type, props: props, hooks: [], dom: null, vnode: null, dirty: false, mounted: true };
-    }
-
-    function schedulePatch(fiberId) {
-        var f = fiberRegistry.get(fiberId);
-        if (!f || f.dirty) return;
-        f.dirty = true;
-        if (patchScheduled.has(fiberId)) return;
-        patchScheduled.add(fiberId);
-        Promise.resolve().then(function () {
-            if (!f.dirty) return;
-            performPatch(f);
-            patchScheduled.delete(fiberId);
-        });
-    }
-
-    function performPatch(f) {
-        if (!f.dom || !f.dom.parentNode) {
-            f.dirty = false;
-            return;
-        }
-
-        var prevRendering = currentRenderingComponent;
-        currentRenderingComponent = f.id;
-        currentHookIndex = 0;
-
-        var nextVNode;
-        try {
-            nextVNode = f.type(f.props);
-        } catch (e) {
-            console.error('[MR:Patch] Component error', e);
-            f.dirty = false;
-            currentRenderingComponent = prevRendering;
-            return;
-        }
-
-        var prevVNode = f.vnode;
-
-        if (nextVNode && typeof nextVNode === 'object') {
-            nextVNode._ref = function (domNode) {
-                f.dom = domNode;
-            };
-        }
-
-        var parentDOM = f.dom.parentNode;
-
-        try {
-            M.VDOM.patch(parentDOM, nextVNode, prevVNode, _globalDatabase || {}, {}, "");
-            f.vnode = nextVNode;
-        } catch (e) {
-            console.error('[MR:Patch] Failed, fallback to full rebuild', e);
-            scheduleRender();
-        }
-
-        f.dirty = false;
-        currentRenderingComponent = prevRendering;
-        runLayoutEffects();
-        runEffects();
     }
 
     // ===================================================================
@@ -537,11 +474,7 @@
             var cp = props || {};
             cp.children = flatChildren.length === 1 ? flatChildren[0] : flatChildren;
 
-            var baseName = type.displayName || type.name || 'Component';
-            var uniqueKey = cp.key != null ? String(cp.key) : null;
-            var compId = uniqueKey
-                ? (baseName + ':key:' + uniqueKey)
-                : (baseName + ':' + componentRenderIndex);
+            var compId = (type.displayName || type.name || 'Component') + ':' + componentRenderIndex;
             componentRenderIndex += 1;
 
             var prevComponent = currentRenderingComponent;
@@ -649,25 +582,21 @@
         if (!componentStateStore[compId]) componentStateStore[compId] = [];
 
         if (componentStateStore[compId][hookIdx] === undefined) {
+            // Support lazy initialization
             var initial = typeof initialValue === 'function' ? initialValue() : initialValue;
             componentStateStore[compId][hookIdx] = initial;
         }
 
         var value = componentStateStore[compId][hookIdx];
 
+        // Create stable setter reference
         var setter = (function (cId, hIdx) {
             return function setValue(newValue) {
                 var current = componentStateStore[cId][hIdx];
                 var next = typeof newValue === 'function' ? newValue(current) : newValue;
                 if (next !== current) {
                     componentStateStore[cId][hIdx] = next;
-
-                    var fiber = fiberRegistry.get(cId);
-                    if (fiber && fiber.dom && fiber.mounted) {
-                        schedulePatch(fiber.id);
-                    } else {
-                        scheduleRender();
-                    }
+                    scheduleRender();
                 }
             };
         })(compId, hookIdx);
@@ -1039,284 +968,81 @@
     }
 
     // -------------------------------------------------------------------
-    // initMishkah - Pre-register contexts BEFORE render starts
-    // MUST be called before Mishkah.React.render()
-    // -------------------------------------------------------------------
-    var _globalDatabase = null;
-    var STORAGE_KEY = 'mishkah_env';
-
-    // Helper: Load env from localStorage
-    function loadEnvFromStorage() {
-        try {
-            if (typeof localStorage !== 'undefined') {
-                var saved = localStorage.getItem(STORAGE_KEY);
-                if (saved) return JSON.parse(saved);
-            }
-        } catch (e) { }
-        return null;
-    }
-
-    // Helper: Save env to localStorage
-    function saveEnvToStorage(env) {
-        try {
-            if (typeof localStorage !== 'undefined' && env) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                    theme: env.theme,
-                    lang: env.lang,
-                    dir: env.dir
-                }));
-            }
-        } catch (e) { }
-    }
-
-    function initMishkah(database) {
-        _globalDatabase = database || {};
-
-        // Load persisted env from localStorage (first init only)
-        var savedEnv = loadEnvFromStorage();
-        if (savedEnv && _globalDatabase.env) {
-            // Merge saved values into database
-            if (savedEnv.theme) _globalDatabase.env.theme = savedEnv.theme;
-            if (savedEnv.lang) _globalDatabase.env.lang = savedEnv.lang;
-            if (savedEnv.dir) _globalDatabase.env.dir = savedEnv.dir;
-        }
-
-        var env = _globalDatabase.env || {};
-        var i18nDict = (_globalDatabase.i18n && _globalDatabase.i18n.dict) || {};
-        var theme = env.theme || 'dark';
-        var lang = env.lang || 'ar';
-        var dir = env.dir || (lang === 'ar' ? 'rtl' : 'ltr');
-
-        // Create translation function
-        var t = createT(i18nDict, lang);
-
-        // Pre-register ThemeContext with localStorage save
-        contextRegistry.set(ThemeContext._id, {
-            theme: theme,
-            tokens: tokens,
-            setTheme: function (newTheme) {
-                if (_globalDatabase.env) {
-                    _globalDatabase.env.theme = newTheme;
-                    saveEnvToStorage(_globalDatabase.env);
-                }
-                scheduleRender();
-            }
-        });
-
-        // Pre-register I18nContext with localStorage save
-        contextRegistry.set(I18nContext._id, {
-            lang: lang,
-            dir: dir,
-            dict: i18nDict,
-            t: t,
-            setLang: function (newLang) {
-                if (_globalDatabase.env) {
-                    _globalDatabase.env.lang = newLang;
-                    _globalDatabase.env.dir = newLang === 'ar' ? 'rtl' : 'ltr';
-                    saveEnvToStorage(_globalDatabase.env);
-                }
-                scheduleRender();
-            }
-        });
-
-        // Pre-register DatabaseContext
-        contextRegistry.set(DatabaseContext._id, {
-            data: _globalDatabase.data || {},
-            env: env,
-            i18n: _globalDatabase.i18n,
-            getState: function () { return _globalDatabase; },
-            setState: function (updater) {
-                if (typeof updater === 'function') {
-                    _globalDatabase = updater(_globalDatabase);
-                } else {
-                    for (var k in updater) _globalDatabase[k] = updater[k];
-                }
-                if (_globalDatabase.env) saveEnvToStorage(_globalDatabase.env);
-                scheduleRender();
-            }
-        });
-
-        // Apply to document
-        if (typeof document !== 'undefined') {
-            document.documentElement.setAttribute('data-theme', theme);
-            document.documentElement.setAttribute('dir', dir);
-            document.documentElement.setAttribute('lang', lang);
-        }
-
-        return { database: _globalDatabase, t: t };
-    }
-
-    // ===================================================================
-    // Global Toggle Functions (Mishkah Core Pattern)
-    // ===================================================================
-    // These work exactly like playground/app.js toggles:
-    // 1. Update _globalDatabase
-    // 2. Save to localStorage
-    // 3. Apply to document
-    // 4. Call scheduleRender() to trigger full re-render
-
-    function toggleTheme() {
-        if (!_globalDatabase || !_globalDatabase.env) return;
-        var currentTheme = _globalDatabase.env.theme || 'dark';
-        var newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        console.log('🔘 toggleTheme:', currentTheme, '->', newTheme);
-
-        _globalDatabase.env.theme = newTheme;
-        saveEnvToStorage(_globalDatabase.env);
-
-        if (typeof document !== 'undefined') {
-            document.documentElement.setAttribute('data-theme', newTheme);
-        }
-
-        scheduleRender();
-    }
-
-    function toggleLang() {
-        if (!_globalDatabase || !_globalDatabase.env) return;
-        var currentLang = _globalDatabase.env.lang || 'ar';
-        var newLang = currentLang === 'ar' ? 'en' : 'ar';
-        var newDir = newLang === 'ar' ? 'rtl' : 'ltr';
-        console.log('🔘 toggleLang:', currentLang, '->', newLang);
-
-        // 1. Update global database
-        _globalDatabase.env.lang = newLang;
-        _globalDatabase.env.dir = newDir;
-        saveEnvToStorage(_globalDatabase.env);
-
-        // 2. CRITICAL: Re-create t function and update I18nContext in registry
-        // This ensures components get the fresh translation function immediately
-        var i18nDict = (_globalDatabase.i18n && _globalDatabase.i18n.dict) || {};
-        var newT = createT(i18nDict, newLang);
-
-        var currentI18nCtx = contextRegistry.get(I18nContext._id) || {};
-        currentI18nCtx.lang = newLang;
-        currentI18nCtx.dir = newDir;
-        currentI18nCtx.t = newT;  // ← Fresh t() with new language
-        currentI18nCtx.dict = i18nDict;
-        contextRegistry.set(I18nContext._id, currentI18nCtx);
-
-        console.log('📝 Updated I18nContext in registry:', { lang: newLang, dir: newDir });
-
-        // 3. Apply to document (for immediate visual DIR change)
-        if (typeof document !== 'undefined') {
-            document.documentElement.setAttribute('dir', newDir);
-            document.documentElement.setAttribute('lang', newLang);
-        }
-
-        // 4. Trigger full re-render (which now uses the updated context)
-        scheduleRender();
-    }
-
-
     // MishkahProvider - Main Provider
     // -------------------------------------------------------------------
     function MishkahProvider(props) {
-        console.log('🔵 MishkahProvider RENDER START');
+        var database = props.database || {};
+        var env = database.env || {};
+        var i18nDict = (database.i18n && database.i18n.dict) || {};
 
-        // Use global database if initialized, otherwise use props
-        if (!_globalDatabase && props.database) {
-            console.log('⚠️ Initializing _globalDatabase from props');
-            initMishkah(props.database);
-        }
+        // State for database
+        var dbState = useState(database);
+        var currentDb = dbState[0];
+        var setDb = dbState[1];
 
-        // Force re-render trigger
-        var forceUpdate = useState(0)[1];
-
-        // Get current values from global database
-        var db = _globalDatabase || props.database || {};
-        var env = db.env || {};
-        var i18nDict = (db.i18n && db.i18n.dict) || {};
-        var theme = env.theme || 'dark';
-        var lang = env.lang || 'ar';
-        var dir = env.dir || (lang === 'ar' ? 'rtl' : 'ltr');
-
-        console.log('📊 Current state:', { theme, lang, dir });
+        // Derived values
+        var currentEnv = currentDb.env || env;
+        var theme = currentEnv.theme || 'dark';
+        var lang = currentEnv.lang || 'ar';
+        var dir = currentEnv.dir || (lang === 'ar' ? 'rtl' : 'ltr');
+        var currentDict = (currentDb.i18n && currentDb.i18n.dict) || i18nDict;
 
         // Translation function
-        var t = createT(i18nDict, lang);
+        var t = createT(currentDict, lang);
 
-        // Theme context value with proper setTheme
+        // Theme context value
         var themeValue = {
             theme: theme,
             tokens: tokens,
             setTheme: function (newTheme) {
-                var currentTheme = _globalDatabase && _globalDatabase.env ? _globalDatabase.env.theme : 'dark';
-                console.log('🎨 setTheme called:', { current: currentTheme, new: newTheme });
-                if (currentTheme === newTheme) {
-                    console.log('⚠️ Already', newTheme, '- skipping');
-                    return;
-                }
-                if (_globalDatabase && _globalDatabase.env) {
-                    _globalDatabase.env.theme = newTheme;
-                    saveEnvToStorage(_globalDatabase.env);
-                    console.log('✅ Theme updated');
-                }
-                console.log('🔄 Calling forceUpdate...');
-                forceUpdate(function (n) { return n + 1; });
+                setDb(function (prev) {
+                    var newEnv = {};
+                    for (var k in prev.env) newEnv[k] = prev.env[k];
+                    newEnv.theme = newTheme;
+                    var result = {};
+                    for (var k in prev) result[k] = prev[k];
+                    result.env = newEnv;
+                    return result;
+                });
             }
         };
 
-        // i18n context value with proper setLang
+        // i18n context value
         var i18nValue = {
             lang: lang,
             dir: dir,
-            dict: i18nDict,
+            dict: currentDict,
             t: t,
             setLang: function (newLang) {
-                var currentLang = _globalDatabase && _globalDatabase.env ? _globalDatabase.env.lang : 'ar';
-                console.log('🌐 setLang called:', { current: currentLang, new: newLang });
-                if (currentLang === newLang) {
-                    console.log('⚠️ Already', newLang, '- skipping');
-                    return;
-                }
-                console.log('📍 Before:', _globalDatabase.env);
-                if (_globalDatabase && _globalDatabase.env) {
-                    _globalDatabase.env.lang = newLang;
-                    _globalDatabase.env.dir = newLang === 'ar' ? 'rtl' : 'ltr';
-                    saveEnvToStorage(_globalDatabase.env);
-                    console.log('✅ After:', _globalDatabase.env);
-                }
-                console.log('🔄 Calling forceUpdate...');
-                forceUpdate(function (n) {
-                    console.log('🔄 forceUpdate:', n, '->', n + 1);
-                    return n + 1;
+                setDb(function (prev) {
+                    var newEnv = {};
+                    for (var k in prev.env) newEnv[k] = prev.env[k];
+                    newEnv.lang = newLang;
+                    newEnv.dir = newLang === 'ar' ? 'rtl' : 'ltr';
+                    var result = {};
+                    for (var k in prev) result[k] = prev[k];
+                    result.env = newEnv;
+                    return result;
                 });
             }
         };
 
         // Database context value
         var dbValue = {
-            data: db.data || {},
-            env: env,
-            i18n: db.i18n,
-            getState: function () { return _globalDatabase || db; },
-            setState: function (updater) {
-                if (typeof updater === 'function') {
-                    _globalDatabase = updater(_globalDatabase || db);
-                } else {
-                    for (var k in updater) {
-                        if (_globalDatabase) _globalDatabase[k] = updater[k];
-                    }
-                }
-                if (_globalDatabase && _globalDatabase.env) saveEnvToStorage(_globalDatabase.env);
-                forceUpdate(function (n) { return n + 1; });
-            }
+            data: currentDb.data || {},
+            env: currentEnv,
+            i18n: currentDb.i18n,
+            getState: function () { return currentDb; },
+            setState: setDb
         };
 
-        console.log('📝 Registering contexts with:', {
-            theme: themeValue.theme,
-            lang: i18nValue.lang,
-            dir: i18nValue.dir
-        });
-
-        // Update context registrations
+        // CRITICAL: Register ALL contexts BEFORE processing children!
         contextRegistry.set(ThemeContext._id, themeValue);
         contextRegistry.set(I18nContext._id, i18nValue);
         contextRegistry.set(DatabaseContext._id, dbValue);
 
         // Apply theme to document
         useEffect(function () {
-            console.log('🎯 useEffect applying to document:', { theme, dir, lang });
             if (typeof document !== 'undefined') {
                 document.documentElement.setAttribute('data-theme', theme);
                 document.documentElement.setAttribute('dir', dir);
@@ -1324,8 +1050,7 @@
             }
         }, [theme, dir, lang]);
 
-        console.log('🔵 MishkahProvider RENDER END');
-
+        // Now render children - contexts are already registered!
         return props.children;
     }
 
@@ -1585,11 +1310,6 @@
 
         // Mishkah Provider
         MishkahProvider: MishkahProvider,
-        initMishkah: initMishkah,
-
-        // Global Toggle Functions (Mishkah Core Pattern)
-        toggleTheme: toggleTheme,
-        toggleLang: toggleLang,
 
         // Advanced
         forwardRef: forwardRef,

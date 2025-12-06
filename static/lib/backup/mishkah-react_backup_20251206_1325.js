@@ -537,11 +537,7 @@
             var cp = props || {};
             cp.children = flatChildren.length === 1 ? flatChildren[0] : flatChildren;
 
-            var baseName = type.displayName || type.name || 'Component';
-            var uniqueKey = cp.key != null ? String(cp.key) : null;
-            var compId = uniqueKey
-                ? (baseName + ':key:' + uniqueKey)
-                : (baseName + ':' + componentRenderIndex);
+            var compId = (type.displayName || type.name || 'Component') + ':' + componentRenderIndex;
             componentRenderIndex += 1;
 
             var prevComponent = currentRenderingComponent;

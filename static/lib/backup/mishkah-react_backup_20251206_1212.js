@@ -33,16 +33,14 @@
     var batchingUpdates = false;
     var pendingUpdates = [];
 
-    var fiberRegistry = new Map();
-    var activeFiberId = null;
-    var renderPath = '';
-    var patchScheduled = new Set();
-
+    // Context registry
     var contextRegistry = new Map();
     var contextIdCounter = 0;
 
+    // Portal registry
     var portalRegistry = [];
 
+    // Memoized components cache
     var memoCache = new WeakMap();
 
     var debugEnabled = false;
@@ -87,67 +85,6 @@
             }
         }
         return true;
-    }
-
-    function createFiber(id, type, props) {
-        return { id: id, type: type, props: props, hooks: [], dom: null, vnode: null, dirty: false, mounted: true };
-    }
-
-    function schedulePatch(fiberId) {
-        var f = fiberRegistry.get(fiberId);
-        if (!f || f.dirty) return;
-        f.dirty = true;
-        if (patchScheduled.has(fiberId)) return;
-        patchScheduled.add(fiberId);
-        Promise.resolve().then(function () {
-            if (!f.dirty) return;
-            performPatch(f);
-            patchScheduled.delete(fiberId);
-        });
-    }
-
-    function performPatch(f) {
-        if (!f.dom || !f.dom.parentNode) {
-            f.dirty = false;
-            return;
-        }
-
-        var prevRendering = currentRenderingComponent;
-        currentRenderingComponent = f.id;
-        currentHookIndex = 0;
-
-        var nextVNode;
-        try {
-            nextVNode = f.type(f.props);
-        } catch (e) {
-            console.error('[MR:Patch] Component error', e);
-            f.dirty = false;
-            currentRenderingComponent = prevRendering;
-            return;
-        }
-
-        var prevVNode = f.vnode;
-
-        if (nextVNode && typeof nextVNode === 'object') {
-            nextVNode._ref = function (domNode) {
-                f.dom = domNode;
-            };
-        }
-
-        var parentDOM = f.dom.parentNode;
-
-        try {
-            M.VDOM.patch(parentDOM, nextVNode, prevVNode, _globalDatabase || {}, {}, "");
-            f.vnode = nextVNode;
-        } catch (e) {
-            console.error('[MR:Patch] Failed, fallback to full rebuild', e);
-            scheduleRender();
-        }
-
-        f.dirty = false;
-        currentRenderingComponent = prevRendering;
-        runLayoutEffects();
-        runEffects();
     }
 
     // ===================================================================
@@ -537,11 +474,7 @@
             var cp = props || {};
             cp.children = flatChildren.length === 1 ? flatChildren[0] : flatChildren;
 
-            var baseName = type.displayName || type.name || 'Component';
-            var uniqueKey = cp.key != null ? String(cp.key) : null;
-            var compId = uniqueKey
-                ? (baseName + ':key:' + uniqueKey)
-                : (baseName + ':' + componentRenderIndex);
+            var compId = (type.displayName || type.name || 'Component') + ':' + componentRenderIndex;
             componentRenderIndex += 1;
 
             var prevComponent = currentRenderingComponent;
@@ -649,25 +582,21 @@
         if (!componentStateStore[compId]) componentStateStore[compId] = [];
 
         if (componentStateStore[compId][hookIdx] === undefined) {
+            // Support lazy initialization
             var initial = typeof initialValue === 'function' ? initialValue() : initialValue;
             componentStateStore[compId][hookIdx] = initial;
         }
 
         var value = componentStateStore[compId][hookIdx];
 
+        // Create stable setter reference
         var setter = (function (cId, hIdx) {
             return function setValue(newValue) {
                 var current = componentStateStore[cId][hIdx];
                 var next = typeof newValue === 'function' ? newValue(current) : newValue;
                 if (next !== current) {
                     componentStateStore[cId][hIdx] = next;
-
-                    var fiber = fiberRegistry.get(cId);
-                    if (fiber && fiber.dom && fiber.mounted) {
-                        schedulePatch(fiber.id);
-                    } else {
-                        scheduleRender();
-                    }
+                    scheduleRender();
                 }
             };
         })(compId, hookIdx);

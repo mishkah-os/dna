@@ -251,112 +251,178 @@ Perfect for comparing framework approaches!`,
           framework: 'react'
           , wikiId: 'react-counter'
           ,
-          code: ` <!DOCTYPE html>
+          code: `<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mishkah React Interop Test</title>
+    <title>Mishkah React v2.0 Test</title>
     <style>
-        body { font-family: system-ui; padding: 20px; }
-        .card { padding: 20px; border: 1px solid #ddd; border-radius: 8px; max-width: 500px; margin-bottom: 20px; }
-        .btn { padding: 8px 16px; cursor: pointer; border-radius: 4px; border: none; }
-        .btn-primary { background: #007bff; color: white; }
-        .btn-secondary { background: #6c757d; color: white; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .counter {
+            text-align: center;
+            padding: 40px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .count {
+            font-size: 4em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 20px 0;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .success {
+            background: #10b981;
+        }
+
+        .success:hover {
+            background: #059669;
+        }
+
+        .danger {
+            background: #ef4444;
+        }
+
+        .danger:hover {
+            background: #dc2626;
+        }
+
+        .log {
+            background: #1f2937;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
     </style>
     <script src="../lib/mishkah.core.js"></script>
     <script src="../lib/mishkah-react.js"></script>
+    <script src="../lib/mishkah-jsx.js"></script>
 </head>
+
 <body>
-    <div id="app-react-interop"></div>
+    <div class="container">
+        <h1>🚀 Mishkah React v2.0 Test</h1>
+        <div id="app"></div>
+        <div class="log" id="log"></div>
+    </div>
 
-    <script>
-        const { render, useState, useEffect, useRef, useMemo, html } = Mishkah.React;
-        const M = Mishkah;
+    <script type="text/jsx">
+        const { useState, useEffect } = Mishkah.React;
 
-        // ---------------------------------------------------------
-        // 1. Simulate Mishkah UI Components (from mishkah-ui.js)
-        // ---------------------------------------------------------
-        M.UI = M.UI || {}; // Ensure M.UI exists for resolution
-        
-        // UI.Button expects (attrs, children)
-        M.UI.Button = ({ attrs = {}, variant = 'primary' }, children) => {
-            const className = \`btn btn-\${variant} \${attrs.class || ''}\`;
-            return M.h('button', 'Forms', { attrs: { ...attrs, class: className } }, children || []);
-        };
+        function log(msg) {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML += \`[\${time}] \${msg}\n\`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
 
-        // UI.Card expects (props, children)
-        M.UI.Card = ({ title }, children) => {
-            return M.h('div', 'Containers', { attrs: { class: 'card' } }, [
-                M.h('h3', 'Text', {}, [title]),
-                M.h('hr', 'Containers', {}, []),
-                ...children
-            ]);
-        };
-        
-        // Alias for direct usage if needed
-        const UI = M.UI;
-
-        // ---------------------------------------------------------
-        // 2. React Application
-        // ---------------------------------------------------------
-        function App() {
+        function Counter() {
+            log('🔵 Counter component called');
+            
             const [count, setCount] = useState(0);
-            const inputRef = useRef(null);
-
-            // useMemo
-            const double = useMemo(() => {
-                console.log('Calculating double...');
-                return count * 2;
-            }, [count]);
-
-            // useEffect
+            
             useEffect(() => {
-                console.log('Effect: Count changed to', count);
-                if (inputRef.current) {
-                    inputRef.current.focus();
-                }
+                log('✅ useEffect: Count changed to ' + count);
             }, [count]);
 
             function increment() {
-                setCount(c => c + 1);
+                log('➕ Increment clicked');
+                setCount(count + 1);
             }
 
-            // ---------------------------------------------------------
-            // 3. Interoperability Magic
-            // ---------------------------------------------------------
-            return html\`
-                <\${UI.Card} title="React + Mishkah UI Interop ⚛️🤝">
-                    <p>Count: <strong>\${count}</strong></p>
-                    <p>Double (Memo): \${double}</p>
-                    
-                    <div style="margin: 10px 0;">
-                        <!-- 1. Spread Props Support -->
-                        <\${UI.Button} ...\${{ onclick: increment, variant: 'primary', title: 'Spread Props!' }}>
-                            Increment (Spread)
-                        </\${UI.Button}>
-                        
-                        <!-- 2. Function Props (Direct Reference) -->
-                        <Button onclick=\${increment} variant="secondary" style="margin-left: 5px;">
-                            Increment (Function Prop)
-                        </Button>
-                    </div>
+            function decrement() {
+                log('➖ Decrement clicked');
+                setCount(count - 1);
+            }
 
-                    <div style="margin-top: 10px;">
-                        <input ref="\${inputRef}" placeholder="I get focus on update!" />
-                    </div>
+            function reset() {
+                log('🔄 Reset clicked');
+                setCount(0);
+            }
 
-                    <p style="color: #666; font-size: 0.9em;">
-                        <em>This demonstrates React Hooks driving standard Mishkah UI components.</em>
+            return (
+                <div className="counter">
+                    <h2>Counter Test</h2>
+                    <div className="count">{count}</div>
+                    <div>
+                        <button onClick={increment}>
+                            ➕ Increment
+                        </button>
+                        <button className="danger" onClick={decrement}>
+                            ➖ Decrement
+                        </button>
+                        <button className="success" onClick={reset}>
+                            🔄 Reset
+                        </button>
+                    </div>
+                    <p style={{marginTop: '20px', color: '#666'}}>
+                        {count === 0 && '👉 Click a button to start!'}
+                        {count > 0 && '✅ Positive number'}
+                        {count < 0 && '❌ Negative number'}
                     </p>
-                </\${UI.Card}>
-            \`;
+                </div>
+            );
         }
 
-        render(App, document.getElementById('app-react-interop'));
-
+        log('🎬 Starting app...');
+        Mishkah.React.render(Counter, document.getElementById('app'));
+        log('✨ App rendered successfully!');
     </script>
 </body>
+
 </html>`
         },
         {

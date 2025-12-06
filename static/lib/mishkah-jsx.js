@@ -262,7 +262,7 @@
 
     /**
      * Skip over template literal, including nested ${...} expressions.
-     * This ensures JSX-like text inside backticks (e.g., {/* */})
+     * This ensures JSX-like text inside backticks (e.g., {//})
      * is treated as plain string content and not parsed as JSX.
      */
     function skipTemplateLiteral(code, start) {

@@ -111,41 +111,29 @@
             f.dirty = false;
             return;
         }
-
-        var prevRendering = currentRenderingComponent;
-        currentRenderingComponent = f.id;
+        activeFiberId = f.id;
         currentHookIndex = 0;
-
         var nextVNode;
         try {
             nextVNode = f.type(f.props);
         } catch (e) {
             console.error('[MR:Patch] Component error', e);
             f.dirty = false;
-            currentRenderingComponent = prevRendering;
             return;
         }
-
-        var prevVNode = f.vnode;
-
-        if (nextVNode && typeof nextVNode === 'object') {
-            nextVNode._ref = function (domNode) {
-                f.dom = domNode;
-            };
-        }
-
-        var parentDOM = f.dom.parentNode;
-
+        var parent = f.dom.parentNode;
+        var oldDom = f.dom;
+        var newDom;
         try {
-            M.VDOM.patch(parentDOM, nextVNode, prevVNode, _globalDatabase || {}, {}, "");
+            newDom = renderVNode(nextVNode);
+            parent.replaceChild(newDom, oldDom);
+            f.dom = newDom;
             f.vnode = nextVNode;
         } catch (e) {
-            console.error('[MR:Patch] Failed, fallback to full rebuild', e);
-            scheduleRender();
+            console.error('[MR:Patch] Render error', e);
         }
-
         f.dirty = false;
-        currentRenderingComponent = prevRendering;
+        activeFiberId = null;
         runLayoutEffects();
         runEffects();
     }
@@ -537,11 +525,7 @@
             var cp = props || {};
             cp.children = flatChildren.length === 1 ? flatChildren[0] : flatChildren;
 
-            var baseName = type.displayName || type.name || 'Component';
-            var uniqueKey = cp.key != null ? String(cp.key) : null;
-            var compId = uniqueKey
-                ? (baseName + ':key:' + uniqueKey)
-                : (baseName + ':' + componentRenderIndex);
+            var compId = (type.displayName || type.name || 'Component') + ':' + componentRenderIndex;
             componentRenderIndex += 1;
 
             var prevComponent = currentRenderingComponent;
@@ -661,9 +645,8 @@
                 var next = typeof newValue === 'function' ? newValue(current) : newValue;
                 if (next !== current) {
                     componentStateStore[cId][hIdx] = next;
-
-                    var fiber = fiberRegistry.get(cId);
-                    if (fiber && fiber.dom && fiber.mounted) {
+                    var fiber = fiberRegistry.get(activeFiberId || cId);
+                    if (fiber && fiber.mounted) {
                         schedulePatch(fiber.id);
                     } else {
                         scheduleRender();
