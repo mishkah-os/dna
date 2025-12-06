@@ -25,16 +25,332 @@
     function nextTick(fn) { return fn ? resolvedPromise.then(fn) : resolvedPromise }
     var currentInstance = null;
     function createComponentInstance(vnode) { var instance = { vnode: vnode, type: vnode.type, setupState: {}, isMounted: false, subTree: null, update: null, effects: [], provides: Object.create(null), ctx: {} }; instance.ctx._ = instance; return instance }
-    function setupComponent(instance) { var setup = instance.type.setup; if (setup) { currentInstance = instance; var setupResult = setup(instance.type.props || {}, { emit: function () { } }); currentInstance = null; handleSetupResult(instance, setupResult) } else { finishComponentSetup(instance) } }
+    function emit(instance, event, args) {
+        // Convert 'my-event' to 'onMyEvent'
+        var camel = event.replace(/-(\w)/g, function (_, c) { return c ? c.toUpperCase() : '' });
+        var handlerName = 'on' + camel.charAt(0).toUpperCase() + camel.slice(1);
+
+        var handler = instance.vnode.props[handlerName];
+        if (handler && typeof handler === 'function') {
+            handler.apply(null, args);
+        }
+    }
+
+    function setupComponent(instance) {
+        var emitFn = function (event) {
+            var args = [];
+            for (var _i = 1; _i < arguments.length; _i++) args[_i - 1] = arguments[_i];
+            emit(instance, event, args);
+        };
+
+        instance.emit = emitFn; // Internal access
+
+        var setup = instance.type.setup;
+        if (setup) {
+            currentInstance = instance;
+            var setupResult = setup(instance.type.props || {}, { emit: emitFn });
+            currentInstance = null;
+            handleSetupResult(instance, setupResult);
+        } else {
+            // Options API
+            instance.ctx.$emit = emitFn;
+            applyOptions(instance);
+            finishComponentSetup(instance);
+        }
+    }
+
+    function applyOptions(instance) {
+        var options = instance.type;
+        var publicThis = instance.ctx; // Setup context/proxy
+
+        if (!publicThis.$emit && instance.emit) {
+            publicThis.$emit = instance.emit;
+        }
+
+        // 1. Methods
+        if (options.methods) {
+            for (var key in options.methods) {
+                publicThis[key] = options.methods[key].bind(publicThis);
+            }
+        }
+
+        // 2. Data
+        if (options.data) {
+            var data = options.data.call(publicThis);
+            if (typeof data === 'object') {
+                instance.setupState = reactive(data);
+                // Mixin to publicThis
+                for (var key in data) {
+                    (function (k) {
+                        Object.defineProperty(publicThis, k, {
+                            configurable: true,
+                            enumerable: true,
+                            get: function () { return instance.setupState[k]; },
+                            set: function (v) { instance.setupState[k] = v; }
+                        });
+                    })(key);
+                }
+            }
+        } else {
+            instance.setupState = reactive({});
+        }
+
+        // 3. Computed
+        if (options.computed) {
+            for (var key in options.computed) {
+                var getter = options.computed[key];
+                var c = computed(typeof getter === 'function' ? getter.bind(publicThis) : getter.get.bind(publicThis));
+                // Expose unwrapped value to `this`
+                (function (k, computedRef) {
+                    Object.defineProperty(publicThis, k, {
+                        configurable: true,
+                        enumerable: true,
+                        get: function () { return computedRef.value; },
+                        set: function (v) { computedRef.value = v; }
+                    });
+                })(key, c);
+
+                // Add to setupState so template proxy can see it
+                instance.setupState[key] = c;
+            }
+        }
+
+        // 4. Watch
+        if (options.watch) {
+            for (var key in options.watch) {
+                var handler = options.watch[key];
+                // Watcher needs to watch `this[key]`
+                // We need a watch function that accepts a getter
+                (function (k, h) {
+                    watch(function () { return publicThis[k] }, function (n, o) { return typeof h === 'function' ? h.call(publicThis, n, o) : h.handler.call(publicThis, n, o) });
+                })(key, handler);
+            }
+        }
+
+        // 5. Lifecycle
+        if (options.mounted) onMounted(options.mounted.bind(publicThis));
+        if (options.updated) onUpdated(options.updated.bind(publicThis));
+        if (options.unmounted) onUnmounted(options.unmounted.bind(publicThis));
+    }
     function handleSetupResult(instance, setupResult) { if (typeof setupResult === 'function') { instance.render = setupResult } else if (typeof setupResult === 'object') { instance.setupState = setupResult } finishComponentSetup(instance) }
     function finishComponentSetup(instance) { if (!instance.render) { instance.render = instance.type.render || instance.type.template } }
     function mountComponent(vnode, container, anchor) { var instance = vnode.component = createComponentInstance(vnode); setupComponent(instance); setupRenderEffect(instance, vnode, container) }
-    function attachEvents(vnode) { if (!vnode) return; if (vnode._vueEvents && vnode._dom) { for (var ev in vnode._vueEvents) { vnode._dom.addEventListener(ev, vnode._vueEvents[ev]) } } if (vnode.children) { for (var i = 0; i < vnode.children.length; i++) { attachEvents(vnode.children[i]) } } }
-    function setupRenderEffect(instance, initialVNode, container) { instance.update = effect(function componentEffect() { if (!instance.isMounted) { var subTree = instance.subTree = renderComponentRoot(instance); M.VDOM.patch(container, subTree, null, {}, {}, ""); attachEvents(subTree); initialVNode.el = subTree.el ? subTree.el : container.firstChild; instance.isMounted = true; if (instance.mounted) { instance.mounted.forEach(function (hook) { hook() }) } } else { var nextTree = renderComponentRoot(instance); var prevTree = instance.subTree; instance.subTree = nextTree; var el = prevTree.el; M.VDOM.patch(el ? el.parentNode : container, nextTree, prevTree, {}, {}, ""); attachEvents(nextTree); instance.vnode.el = nextTree.el } }, { scheduler: function () { queueJob(instance.update) } }) }
-    function renderComponentRoot(instance) { var render = instance.render; if (!render) return null; var proxy = new Proxy(instance.setupState, { get: function (target, key) { var val; if (key in target) val = target[key]; else if (key in instance.ctx) val = instance.ctx[key]; else return undefined; return (val && val.__v_isRef) ? val.value : val; }, set: function (target, key, value) { if (key in target) { var curr = target[key]; if (curr && curr.__v_isRef && !value.__v_isRef) { curr.value = value; return true } target[key] = value; return true } return false } }); return render.call(proxy, proxy) }
+    // EVENT DELEGATION SYSTEM
+    var eventRegistry = new Map(); // gkey -> handlers
+    var delegatedEvents = new Set(); // set of event names (click, input, etc.) attached to doc/root
+
+    function registerEvents(gkey, events) {
+        eventRegistry.set(gkey, events);
+        // Ensure we listen for these event types globally
+        for (var ev in events) {
+            if (!delegatedEvents.has(ev)) {
+                delegatedEvents.add(ev);
+                document.addEventListener(ev, globalEventHandler, true); // Capture or Bubble? Usually bubble. Let's use capture for safety or bubble? 
+                // React uses bubble for most. Mishkah Core uses bubble.
+                // Re-doing: use bubble listener on document is easiest.
+                // But wait, existing code might stop propagation. 
+                // Let's stick to document level bubble.
+            }
+        }
+    }
+
+    function globalEventHandler(e) {
+        var target = e.target;
+        while (target) {
+            // Mishkah Core uses 'data-m-gkey'
+            var gkey = target.getAttribute ? target.getAttribute('data-m-gkey') : null;
+            if (gkey) {
+                var handlers = eventRegistry.get(gkey);
+                // Mishkah allows multiple gkeys split by space/comma?
+                // Our generator produces single key 'vue:x'. 
+                // But let's be safe and check if we need to split.
+                // For now, simpler is better.
+                if (handlers && handlers[e.type]) {
+                    handlers[e.type](e);
+                }
+            }
+            target = target.parentNode;
+            if (target === document) break;
+        }
+    }
+
+    // Ensure we handle global listeners once. 
+    // Optimization: we can just attach common ones, or dynamic.
+    // Dynamic is implemented above (add on first use).
+
+    function attachEvents(vnode) {
+        // No-op for direct DOM attachment now. 
+        // We rely on gkey and global delegation.
+        // BUT we need to ensure gkey attribute is actually on the DOM.
+        // M.VDOM.patch does set attributes from props/attrs.
+        // My h() puts gkey in attrs.gkey, so M.VDOM.h puts it in attrs.
+        // patch() should apply it.
+    }
+
+    // Updated h function
     var gkeyCounter = 0;
-    function h(type, props, children) { if (typeof type === 'string') { var cfg = { attrs: {} }; var events = {}; if (props) { for (var k in props) { if (k.indexOf('on') === 0 && typeof props[k] === 'function') { events[k.toLowerCase().substring(2)] = props[k] } else if (k === 'class' || k === 'className') { cfg.attrs['class'] = props[k] } else { cfg.attrs[k] = props[k] } } } if (Object.keys(events).length > 0) { cfg.attrs.gkey = 'vue:' + (++gkeyCounter) } var vnode = M.h(type, 'Vue', cfg, children != null ? children : []); vnode._vueEvents = events; return vnode } return { tag: type, type: type, props: props || {}, children: children || [], category: 'Vue', key: props ? props.key : null } }
-    function createApp(rootComponent) { return { mount: function (selector) { var container = typeof selector === 'string' ? document.querySelector(selector) : selector; var vnode = { tag: rootComponent, type: rootComponent, props: {}, children: [], category: 'Vue', appContext: {} }; mountComponent(vnode, container) } } }
+    function h(type, props, children) {
+        if (typeof type === 'string') {
+            var cfg = { attrs: {} };
+            var events = {};
+            if (props) {
+                for (var k in props) {
+                    if (k.indexOf('on') === 0 && typeof props[k] === 'function') {
+                        events[k.toLowerCase().substring(2)] = props[k];
+                    } else if (k === 'class' || k === 'className') {
+                        cfg.attrs['class'] = props[k];
+                    } else {
+                        cfg.attrs[k] = props[k];
+                    }
+                }
+            }
+            if (Object.keys(events).length > 0) {
+                var gk = 'vue:' + (++gkeyCounter);
+                cfg.attrs.gkey = gk;
+                // Register globally
+                registerEvents(gk, events);
+            }
+            // Pass to Core
+            var vnode = M.h(type, 'Vue', cfg, children != null ? children : []);
+            // vnode._vueEvents = events; // Not needed on vnode anymore for attach, but maybe for cleanup?
+            // Cleanup is hard in this simple engine (when element removed, registry leaks).
+            // For now, infinite registry (simple).
+            return vnode;
+        }
+        return { tag: type, type: type, props: props || {}, children: children || [], category: 'Vue', key: props ? props.key : null }
+    }
+
+    // Proxy Handler with Global Helpers
+    var proxyHandler = {
+        get: function (target, key, receiver) {
+            var val;
+            // 1. Setup State
+            if (key in target) val = target[key];
+            // 2. Context (Methods, etc)
+            else if (key in currentInstance.ctx) val = currentInstance.ctx[key]; // currentInstance usage here is risky if not bound? 
+            // Wait, proxy is created per instance. receiver is proxy.
+            // We need 'instance' in scope. We can't use generic handler easily if we need closure.
+            // Revert to inline closure in renderComponentRoot.
+            else return undefined;
+            return (val && val.__v_isRef) ? val.value : val;
+        },
+        set: function (target, key, value) {
+            if (key in target) {
+                var curr = target[key];
+                if (curr && curr.__v_isRef && !value.__v_isRef) {
+                    curr.value = value; return true
+                }
+                target[key] = value; return true
+            }
+            return false
+        }
+    };
+
+    function renderComponentRoot(instance) {
+        var render = instance.render;
+        if (!render) return null;
+
+        // Add Global Helpers to Context if not present
+        if (!instance.ctx.$t) {
+            var i18n = useI18n();
+            instance.ctx.$t = i18n.t;
+            instance.ctx.$i18n = i18n;
+            instance.ctx.$db = useDatabase();
+            instance.ctx.$theme = useTheme();
+        }
+
+        var proxy = new Proxy(instance.setupState, {
+            get: function (target, key) {
+                var val;
+                // 1. Setup State (Data)
+                if (key in target) val = target[key];
+                // 2. Context (Methods, $t, $db)
+                else if (key in instance.ctx) val = instance.ctx[key];
+                else return undefined;
+                return (val && val.__v_isRef) ? val.value : val;
+            },
+            set: function (target, key, value) {
+                if (key in target) {
+                    var curr = target[key];
+                    if (curr && curr.__v_isRef && !value.__v_isRef) {
+                        curr.value = value; return true
+                    }
+                    target[key] = value; return true
+                }
+                return false
+            }
+        });
+        return render.call(proxy, proxy)
+    }
+
+    // Update attachEvents to do nothing (or just recursion if needed logic later)
+    // Actually we can remove calls to attachEvents from setupRenderEffect?
+    function setRefs(instance, vnode) {
+        if (!vnode) return;
+        if (vnode.props && vnode.props.ref) {
+            instance.refs[vnode.props.ref] = vnode.el;
+        }
+        if (vnode.children && Array.isArray(vnode.children)) {
+            for (var i = 0; i < vnode.children.length; i++) {
+                setRefs(instance, vnode.children[i]);
+            }
+        }
+    }
+
+    // User wants "delegation", so we registered in h().
+    // The DOM attributes 'gkey' are set by M.VDOM.patch.
+    // The Global Listener handles it.
+    // So setupRenderEffect can just patch.
+
+    function setupRenderEffect(instance, initialVNode, container) {
+        instance.update = effect(function componentEffect() {
+            if (!instance.isMounted) {
+                var subTree = instance.subTree = renderComponentRoot(instance);
+                M.VDOM.patch(container, subTree, null, {}, {}, "");
+                initialVNode.el = subTree.el ? subTree.el : container.firstChild;
+
+                // Set Refs after mount
+                instance.refs = {};
+                instance.ctx.$refs = instance.refs;
+                setRefs(instance, subTree);
+
+                instance.isMounted = true;
+                if (instance.mounted) {
+                    instance.mounted.forEach(function (hook) { hook() })
+                }
+            } else {
+                var nextTree = renderComponentRoot(instance);
+                var prevTree = instance.subTree;
+                instance.subTree = nextTree;
+                var el = prevTree.el;
+                M.VDOM.patch(el ? el.parentNode : container, nextTree, prevTree, {}, {}, "");
+                instance.vnode.el = nextTree.el;
+
+                // Update Refs after patch
+                instance.refs = {}; // Clear old refs? Or merge? Vue 3 clears usually.
+                instance.ctx.$refs = instance.refs;
+                setRefs(instance, nextTree);
+
+                if (instance.updated) {
+                    instance.updated.forEach(function (hook) { hook() })
+                }
+            }
+        }, { scheduler: function () { queueJob(instance.update) } })
+    }
+
+    // Init Global Listeners on First Load?
+    // We do it lazily in h().
+
+    function createApp(rootComponent) {
+        return {
+            mount: function (selector) {
+                var container = typeof selector === 'string' ? document.querySelector(selector) : selector;
+                var vnode = { tag: rootComponent, type: rootComponent, props: {}, children: [], category: 'Vue', appContext: {} };
+                mountComponent(vnode, container)
+            }
+        }
+    }
+
     function inject(key, defaultValue) { if (currentInstance) { if (key in currentInstance.provides) { return currentInstance.provides[key] } else if (currentInstance.parent) { return currentInstance.parent.provides[key] } } return defaultValue }
     function provide(key, value) { if (currentInstance) { currentInstance.provides[key] = value } }
     function onMounted(fn) { if (currentInstance) { if (!currentInstance.mounted) currentInstance.mounted = []; currentInstance.mounted.push(fn) } }
@@ -43,7 +359,11 @@
 
     // GLOBAL INIT & STATE
     var globalState = reactive({ db: { data: {}, env: { lang: 'ar', dir: 'rtl', theme: 'dark' }, i18n: { dict: {} } }, theme: { tokens: {}, vars: {}, current: 'dark' } });
+    console.log('MishkahVue: globalState initialized:', globalState);
+
     function initMishkah(config) {
+        console.log('MishkahVue: initMishkah called with:', config);
+        console.log('MishkahVue: globalState inside init:', globalState);
         if (config) {
             if (config.env) Object.assign(globalState.db.env, config.env);
             if (config.i18n) globalState.db.i18n = config.i18n;
