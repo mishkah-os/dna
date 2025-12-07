@@ -167,13 +167,18 @@
   <div x-data="{ count: 0, open: false }" class="card">
     <h2>Alpine Style Counter</h2>
     <p>Count: <strong x-text="count"></strong></p>
-    <button @click="count++">Increment</button>
+    <button @click="count">Increment++</button>
     <button @click="open = !open">Toggle Details</button>
     <div x-show="open" style="margin-top: 10px; padding: 10px; background: #0b1224; border-radius:12px;">
       <p>This is toggled via <code>x-show</code>!</p>
       <p>Current count is <span x-text="count"></span></p>
     </div>
   </div>
+  
+   <script>
+        // Start the engine
+        Mishkah.Alpine.start();
+    </script>
 </body>
 </html>`;
 
