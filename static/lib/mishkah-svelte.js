@@ -1,7 +1,7 @@
 /*!
  * mishkah-svelte.js — Svelte 5 (Runes) Layer for Mishkah
- * Provides: mount, state, derived, effect
- * 2025-12-03 (standalone edition)
+ * Provides: mount, state, derived, effect, html
+ * 2025-12-03 (standalone, non-VDOM)
  */
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
@@ -15,20 +15,112 @@
 }(typeof window !== 'undefined' ? window : this, function (global, M) {
     "use strict";
 
-    var activeSubscriber = null;
-    var htmlId = 0;
+    // -------------------------------------------------------------------
+    // Tiny Dependency Graph (no VDOM, fine-grained)
+    // -------------------------------------------------------------------
+    var bucket = new WeakMap();
+    var activeEffect = null;
+    var effectStack = [];
+
+    function track(target, key) {
+        if (!activeEffect) return;
+        var depsMap = bucket.get(target);
+        if (!depsMap) {
+            depsMap = new Map();
+            bucket.set(target, depsMap);
+        }
+        var dep = depsMap.get(key);
+        if (!dep) {
+            dep = new Set();
+            depsMap.set(key, dep);
+        }
+        dep.add(activeEffect);
+    }
+
+    function trigger(target, key) {
+        var depsMap = bucket.get(target);
+        if (!depsMap) return;
+        var dep = depsMap.get(key);
+        if (!dep) return;
+        dep.forEach(function (effectFn) { effectFn(); });
+    }
+
+    function effect(fn) {
+        var runner = function () {
+            activeEffect = runner;
+            effectStack.push(runner);
+            try { fn(); } finally {
+                effectStack.pop();
+                activeEffect = effectStack[effectStack.length - 1] || null;
+            }
+        };
+        runner();
+        return runner;
+    }
 
     // -------------------------------------------------------------------
-    // Tiny Template Helper (supports events + inline expressions)
+    // State / Derived
     // -------------------------------------------------------------------
+    var proxyCache = new WeakMap();
+    function createProxy(target) {
+        if (typeof target !== 'object' || target === null) return target;
+        if (proxyCache.has(target)) return proxyCache.get(target);
+
+        var proxy = new Proxy(target, {
+            get: function (obj, prop) {
+                track(obj, prop);
+                return createProxy(obj[prop]);
+            },
+            set: function (obj, prop, value) {
+                obj[prop] = value;
+                trigger(obj, prop);
+                return true;
+            }
+        });
+        proxyCache.set(target, proxy);
+        return proxy;
+    }
+
+    function state(initialValue) {
+        return createProxy(initialValue);
+    }
+
+    function derived(fn) {
+        var cache;
+        var recompute = function () {
+            cache = fn();
+        };
+        effect(recompute);
+        return {
+            get value() { return cache; }
+        };
+    }
+
+    // -------------------------------------------------------------------
+    // Template helper
+    // -------------------------------------------------------------------
+    var htmlId = 0;
     function html(strings) {
         var values = [];
         for (var _i = 1; _i < arguments.length; _i++) {
             values[_i - 1] = arguments[_i];
         }
-
         var fns = [];
         var out = '';
+
+        function append(val) {
+            if (val && val.__mishkah_html) {
+                out += val.html;
+                fns = fns.concat(val.fns || []);
+                return;
+            }
+            if (Array.isArray(val)) {
+                val.forEach(function (v) { append(v); });
+                return;
+            }
+            out += (val == null ? '' : val);
+        }
+
         for (var i = 0; i < strings.length; i++) {
             var seg = strings[i];
             out += seg;
@@ -41,7 +133,7 @@
                 fns.push({ id: marker, fn: val });
                 out += marker;
             } else {
-                out += typeof val === 'function' ? val() : (val == null ? '' : val);
+                append(typeof val === 'function' ? val() : val);
             }
         }
 
@@ -63,7 +155,6 @@
         target.innerHTML = templateHTML;
 
         if (!fnList.length) return;
-
         var all = target.querySelectorAll('*');
         for (var i = 0; i < all.length; i++) {
             var el = all[i];
@@ -82,61 +173,17 @@
     }
 
     // -------------------------------------------------------------------
-    // Signals-style runtime
+    // Mount (component rerenders when used state changes)
     // -------------------------------------------------------------------
-    function createNotifier() {
-        var listeners = new Set();
-        return {
-            subscribe: function (fn) { listeners.add(fn); },
-            notify: function () { listeners.forEach(function (fn) { return fn(); }); }
-        };
-    }
-
-    function state(initialValue) {
-        var notifier = createNotifier();
-
-        function createProxy(target) {
-            if (typeof target !== 'object' || target === null) return target;
-            return new Proxy(target, {
-                get: function (obj, prop) {
-                    if (prop === '$subscribe') return function (fn) { notifier.subscribe(fn); };
-                    if (activeSubscriber) notifier.subscribe(activeSubscriber);
-                    return createProxy(obj[prop]);
-                },
-                set: function (obj, prop, value) {
-                    obj[prop] = value;
-                    notifier.notify();
-                    return true;
-                }
-            });
-        }
-
-        return createProxy(initialValue);
-    }
-
-    function derived(fn) {
-        return {
-            get value() { return fn(); }
-        };
-    }
-
-    function effect(fn) {
-        fn();
-    }
-
     function mount(ComponentFn, target) {
         var container = typeof target === 'string' ? document.querySelector(target) : target;
         if (!container) return;
 
-        function render() {
-            activeSubscriber = render;
-            var result = ComponentFn();
-            if (typeof result === 'function') result = result();
-            renderTemplate(result, {}, container);
-            activeSubscriber = null;
-        }
-
-        render();
+        effect(function render() {
+            var output = ComponentFn();
+            if (typeof output === 'function') output = output();
+            renderTemplate(output, {}, container);
+        });
     }
 
     return {

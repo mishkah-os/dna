@@ -1,7 +1,7 @@
 /*!
  * mishkah-alpine.js — Alpine.js-like (Direct DOM) Layer for Mishkah
- * Provides: start
- * 2025-12-03
+ * Provides: start (auto-starts on DOMContentLoaded)
+ * 2025-12-12
  */
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
@@ -15,201 +15,206 @@
 }(typeof window !== 'undefined' ? window : this, function (global, M) {
     "use strict";
 
-    // -------------------------------------------------------------------
-    // Alpine-like Direct DOM Engine
-    // -------------------------------------------------------------------
+    // Lightweight reactive core (property-level tracking)
+    var bucket = new WeakMap();
+    var activeEffect = null;
 
-    function start() {
-        // 1. Find all roots (x-data)
-        var roots = document.querySelectorAll('[x-data]');
+    function track(target, key) {
+        if (!activeEffect) return;
+        var depsMap = bucket.get(target);
+        if (!depsMap) {
+            depsMap = new Map();
+            bucket.set(target, depsMap);
+        }
+        var dep = depsMap.get(key);
+        if (!dep) {
+            dep = new Set();
+            depsMap.set(key, dep);
+        }
+        dep.add(activeEffect);
+    }
 
-        roots.forEach(function (rootEl) {
-            if (rootEl.__mishkah_alpine_inited) return;
-            rootEl.__mishkah_alpine_inited = true;
+    function trigger(target, key) {
+        var depsMap = bucket.get(target);
+        if (!depsMap) return;
+        var dep = depsMap.get(key);
+        if (!dep) return;
+        dep.forEach(function (effectFn) { effectFn(); });
+    }
 
-            // 2. Initialize State
-            var dataExpr = rootEl.getAttribute('x-data');
-            var initialState = {};
-            try {
-                // Evaluate x-data="{ count: 0 }"
-                // We use a Function to eval in a safe-ish scope
-                initialState = new Function('return ' + dataExpr)();
-            } catch (e) {
-                console.error('Mishkah Alpine: Error evaluating x-data', e);
+    function effect(fn) {
+        var runner = function () {
+            activeEffect = runner;
+            try { fn(); } finally { activeEffect = null; }
+        };
+        runner();
+        return runner;
+    }
+
+    function reactive(obj) {
+        return new Proxy(obj, {
+            get: function (target, prop) {
+                track(target, prop);
+                var value = target[prop];
+                return (typeof value === 'object' && value !== null) ? reactive(value) : value;
+            },
+            set: function (target, prop, value) {
+                target[prop] = value;
+                trigger(target, prop);
+                return true;
             }
-
-            // Create Reactive Proxy (using Svelte's state)
-            // Note: Svelte's state() uses React hooks under the hood.
-            // BUT here we are NOT in a React component! We are in global scope.
-            // S.state() expects to be called inside a component (R.useState).
-            // This is a problem. Our Svelte layer is VDOM-bound.
-
-            // We need a standalone reactivity system for Alpine.
-            // Or we can "fake" a component environment?
-            // No, let's build a simple standalone reactivity here using the same principles.
-
-            var state = createStandaloneState(initialState);
-
-            // 3. Bind Directives
-            walk(rootEl, state);
         });
     }
 
-    // Standalone Reactivity (Deep Proxy + Subscribers)
-    function createStandaloneState(initial) {
-        var listeners = new Set();
-
-        function notify() {
-            listeners.forEach(function (fn) { fn(); });
-        }
-
-        function createProxy(target) {
-            if (typeof target !== 'object' || target === null) return target;
-            return new Proxy(target, {
-                get: function (obj, prop) {
-                    return createProxy(obj[prop]);
-                },
-                set: function (obj, prop, value) {
-                    obj[prop] = value;
-                    notify();
-                    return true;
-                }
-            });
-        }
-
-        var proxy = createProxy(initial);
-        proxy.$subscribe = function (fn) { listeners.add(fn); };
-        return proxy;
+    // -------------------------------------------------------------------
+    // Directive bindings
+    // -------------------------------------------------------------------
+    function bindText(el, state, expr) {
+        effect(function () {
+            el.textContent = evaluate(expr, state);
+        });
     }
 
-    function walk(el, state) {
-        // Process attributes
+    function bindHtml(el, state, expr) {
+        effect(function () {
+            el.innerHTML = evaluate(expr, state);
+        });
+    }
 
-        // x-text
-        if (el.hasAttribute('x-text')) {
-            var expr = el.getAttribute('x-text');
-            bindEffect(el, state, function () {
-                el.textContent = evaluate(expr, state);
-            });
-        }
+    function bindShow(el, state, expr) {
+        effect(function () {
+            el.style.display = evaluate(expr, state) ? '' : 'none';
+        });
+    }
 
-        // x-html
-        if (el.hasAttribute('x-html')) {
-            var expr = el.getAttribute('x-html');
-            bindEffect(el, state, function () {
-                el.innerHTML = evaluate(expr, state);
-            });
-        }
+    function bindModel(el, state, expr) {
+        effect(function () { el.value = evaluate(expr, state); });
+        el.addEventListener('input', function (e) {
+            assign(expr, state, e.target.value);
+        });
+    }
 
-        // x-show
-        if (el.hasAttribute('x-show')) {
-            var expr = el.getAttribute('x-show');
-            bindEffect(el, state, function () {
-                el.style.display = evaluate(expr, state) ? '' : 'none';
-            });
-        }
-
-        // x-on:click or @click
-        Array.from(el.attributes).forEach(function (attr) {
-            var name = attr.name;
-            var eventName = null;
-
-            if (name.startsWith('x-on:')) eventName = name.replace('x-on:', '');
-            if (name.startsWith('@')) eventName = name.replace('@', '');
-
-            if (eventName) {
-                var expr = attr.value;
-                el.addEventListener(eventName, function (e) {
-                    // Execute expression with $event
-                    evaluate(expr, state, { $event: e });
+    function bindAttr(el, state, prop, expr) {
+        effect(function () {
+            var val = evaluate(expr, state);
+            if (prop === 'class' && typeof val === 'object') {
+                Object.keys(val).forEach(function (cls) {
+                    if (val[cls]) el.classList.add(cls); else el.classList.remove(cls);
                 });
-            }
-
-            // x-bind:class or :class
-            if (name.startsWith('x-bind:') || name.startsWith(':')) {
-                var prop = name.startsWith(':') ? name.replace(':', '') : name.replace('x-bind:', '');
-                var expr = attr.value;
-                bindEffect(el, state, function () {
-                    var val = evaluate(expr, state);
-                    if (prop === 'class' && typeof val === 'object') {
-                        // Object syntax: { active: true }
-                        for (var cls in val) {
-                            if (val[cls]) el.classList.add(cls);
-                            else el.classList.remove(cls);
-                        }
-                    } else {
-                        el.setAttribute(prop, val);
-                    }
-                });
-            }
-
-            // x-model (Two-way binding)
-            if (name === 'x-model') {
-                var prop = attr.value; // e.g. "count" or "user.name"
-                // 1. Bind value -> input
-                bindEffect(el, state, function () {
-                    el.value = evaluate(prop, state);
-                });
-                // 2. Bind input -> value
-                el.addEventListener('input', function (e) {
-                    // We need to set the value.
-                    // Simple assignment for top-level: state[prop] = ...
-                    // For nested: user.name = ... (requires parsing)
-                    // For now, simple top-level support
-                    state[prop] = e.target.value;
-                });
+            } else {
+                el.setAttribute(prop, val);
             }
         });
-
-        // Recurse
-        var child = el.firstElementChild;
-        while (child) {
-            // If child has x-data, it's a new scope (nested).
-            // For now, we don't support nested scopes inheriting parent.
-            if (!child.hasAttribute('x-data')) {
-                walk(child, state);
-            }
-            child = child.nextElementSibling;
-        }
     }
 
-    function bindEffect(el, state, fn) {
-        // Run immediately
-        fn();
-        // Subscribe to state changes
-        // This is "coarse-grained" (updates on ANY state change).
-        // Efficient enough for small Alpine widgets.
-        state.$subscribe(fn);
+    function bindOn(el, state, eventName, expr) {
+        el.addEventListener(eventName, function (e) {
+            evaluate(expr, state, { $event: e });
+        });
     }
 
+    // -------------------------------------------------------------------
+    // Expression helpers
+    // -------------------------------------------------------------------
     function evaluate(expr, state, extra) {
         try {
-            // Create a function with `this` as state and variables from state
-            // This is the magic of Alpine/Vue templates
-            var keys = Object.keys(state).filter(k => k !== '$subscribe');
-            var args = keys.concat(extra ? Object.keys(extra) : []);
-            var values = keys.map(k => state[k]).concat(extra ? Object.values(extra) : []);
-
-            var fn = new Function(args.join(','), 'return ' + expr);
-            return fn.apply(state, values);
+            var scopeKeys = Object.keys(state);
+            var scopeVals = scopeKeys.map(function (k) { return state[k]; });
+            var extraKeys = extra ? Object.keys(extra) : [];
+            var extraVals = extra ? Object.values(extra) : [];
+            var fn = new Function(scopeKeys.concat(extraKeys).join(','), 'return ' + expr);
+            return fn.apply(state, scopeVals.concat(extraVals));
         } catch (e) {
             console.warn('Mishkah Alpine: Eval error', e);
             return '';
         }
     }
 
-    // Auto-start on load
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start);
-    } else {
-        start();
+    function assign(expr, state, value) {
+        try {
+            var fn = new Function('state', 'value', 'with(state){ ' + expr + ' = value; }');
+            fn(state, value);
+        } catch (e) {
+            console.warn('Mishkah Alpine: assign error', e);
+        }
     }
 
     // -------------------------------------------------------------------
-    // Exports
+    // Walker
     // -------------------------------------------------------------------
-    return {
-        start: start
-    };
+    function walk(el, state) {
+        if (el.nodeType !== 1) return;
+
+        // x-text
+        if (el.hasAttribute('x-text')) bindText(el, state, el.getAttribute('x-text'));
+        // x-html
+        if (el.hasAttribute('x-html')) bindHtml(el, state, el.getAttribute('x-html'));
+        // x-show
+        if (el.hasAttribute('x-show')) bindShow(el, state, el.getAttribute('x-show'));
+
+        // Attributes
+        Array.from(el.attributes).forEach(function (attr) {
+            var name = attr.name;
+            var value = attr.value;
+
+            // x-model
+            if (name === 'x-model') {
+                bindModel(el, state, value);
+            }
+
+            // x-on / @
+            if (name.startsWith('x-on:')) {
+                bindOn(el, state, name.slice(5), value);
+            } else if (name.startsWith('@')) {
+                bindOn(el, state, name.slice(1), value);
+            }
+
+            // x-bind / :
+            if (name.startsWith('x-bind:')) {
+                bindAttr(el, state, name.slice(7), value);
+            } else if (name.startsWith(':')) {
+                bindAttr(el, state, name.slice(1), value);
+            }
+        });
+
+        // Walk children (skip nested x-data scopes)
+        var child = el.firstElementChild;
+        while (child) {
+            if (!child.hasAttribute('x-data')) walk(child, state);
+            child = child.nextElementSibling;
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Bootstrapper
+    // -------------------------------------------------------------------
+    function start() {
+        var roots = document.querySelectorAll('[x-data]');
+        roots.forEach(function (rootEl) {
+            if (rootEl.__mishkah_alpine_inited) return;
+            rootEl.__mishkah_alpine_inited = true;
+
+            var dataExpr = rootEl.getAttribute('x-data');
+            var initialState = {};
+            try {
+                initialState = new Function('return ' + dataExpr)();
+            } catch (e) {
+                console.error('Mishkah Alpine: Error evaluating x-data', e);
+            }
+
+            var state = reactive(initialState);
+            walk(rootEl, state);
+        });
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start);
+        } else {
+            start();
+        }
+    }
+
+    return { start: start };
 
 }));

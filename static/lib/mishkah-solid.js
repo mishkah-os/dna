@@ -1,7 +1,7 @@
 /*!
- * mishkah-solid.js — SolidJS (Signals) Layer for Mishkah
- * Provides: createSignal, createEffect, createMemo, render
- * 2025-12-03 (standalone edition)
+ * mishkah-solid.js — SolidJS-like Signals Layer for Mishkah
+ * Provides: createSignal, createEffect, createMemo, render, html, Show, For
+ * 2025-12-12 (signal-driven, Mishkah-core template renderer)
  */
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
@@ -15,17 +15,74 @@
 }(typeof window !== 'undefined' ? window : this, function (global, M) {
     "use strict";
 
-    var activeSubscriber = null;
-    var htmlId = 0;
+    // -------------------------------------------------------------------
+    // Signal graph (fine-grained reactivity)
+    // -------------------------------------------------------------------
+    var activeEffect = null;
+    var effectStack = [];
 
+    function createSignal(initialValue) {
+        var value = initialValue;
+        var subscribers = new Set();
+
+        function getter() {
+            if (activeEffect) subscribers.add(activeEffect);
+            return value;
+        }
+
+        function setter(next) {
+            value = (typeof next === 'function') ? next(value) : next;
+            subscribers.forEach(function (fn) { fn(); });
+        }
+
+        return [getter, setter];
+    }
+
+    function createEffect(fn) {
+        var runner = function () {
+            activeEffect = runner;
+            effectStack.push(runner);
+            try { fn(); } finally {
+                effectStack.pop();
+                activeEffect = effectStack[effectStack.length - 1] || null;
+            }
+        };
+        runner();
+        return runner;
+    }
+
+    function createMemo(fn) {
+        var cache;
+        var compute = function () { cache = fn(); };
+        createEffect(compute);
+        return function () { return cache; };
+    }
+
+    // -------------------------------------------------------------------
+    // Template helper (HTML + event wiring)
+    // -------------------------------------------------------------------
+    var htmlId = 0;
     function html(strings) {
         var values = [];
         for (var _i = 1; _i < arguments.length; _i++) {
             values[_i - 1] = arguments[_i];
         }
-
         var fns = [];
         var out = '';
+
+        function append(val) {
+            if (val && val.__mishkah_html) {
+                out += val.html;
+                fns = fns.concat(val.fns || []);
+                return;
+            }
+            if (Array.isArray(val)) {
+                val.forEach(function (v) { append(v); });
+                return;
+            }
+            out += (val == null ? '' : val);
+        }
+
         for (var i = 0; i < strings.length; i++) {
             var seg = strings[i];
             out += seg;
@@ -38,7 +95,7 @@
                 fns.push({ id: marker, fn: val });
                 out += marker;
             } else {
-                out += typeof val === 'function' ? val() : (val == null ? '' : val);
+                append(typeof val === 'function' ? val() : val);
             }
         }
 
@@ -77,69 +134,9 @@
         }
     }
 
-    function createSignal(initialValue) {
-        var value = initialValue;
-        var listeners = new Set();
-
-        function getter() {
-            if (activeSubscriber) listeners.add(activeSubscriber);
-            return value;
-        }
-
-        function setter(next) {
-            value = typeof next === 'function' ? next(value) : next;
-            listeners.forEach(function (fn) { return fn(); });
-        }
-
-        return [getter, setter];
-    }
-
-    function createEffect(fn) {
-        var runner = function () {
-            activeSubscriber = runner;
-            fn();
-            activeSubscriber = null;
-        };
-        runner();
-    }
-
-    function createMemo(fn) {
-        var cache;
-        var dirty = true;
-        var listeners = new Set();
-
-        function recompute() {
-            activeSubscriber = track;
-            cache = fn();
-            dirty = false;
-            activeSubscriber = null;
-        }
-
-        function track() {
-            listeners.add(activeSubscriber);
-        }
-
-        return function () {
-            if (dirty) recompute();
-            if (activeSubscriber) listeners.add(activeSubscriber);
-            return cache;
-        };
-    }
-
-    function render(ComponentFn, target) {
-        var container = typeof target === 'string' ? document.querySelector(target) : target;
-        if (!container) return;
-
-        function redraw() {
-            activeSubscriber = redraw;
-            var output = ComponentFn();
-            renderTemplate(output, {}, container);
-            activeSubscriber = null;
-        }
-
-        redraw();
-    }
-
+    // -------------------------------------------------------------------
+    // Control helpers
+    // -------------------------------------------------------------------
     function Show(props) {
         var condition = typeof props.when === 'function' ? props.when() : props.when;
         return condition ? props.children : (props.fallback || null);
@@ -148,8 +145,23 @@
     function For(props) {
         var list = typeof props.each === 'function' ? props.each() : props.each;
         if (!Array.isArray(list)) return null;
-        if (typeof props.children === 'function') return list.map(props.children);
+        if (typeof props.children === 'function') {
+            return list.map(function (item, idx) { return props.children(item, idx); });
+        }
         return null;
+    }
+
+    // -------------------------------------------------------------------
+    // Root renderer (signal-aware)
+    // -------------------------------------------------------------------
+    function render(ComponentFn, target) {
+        var container = typeof target === 'string' ? document.querySelector(target) : target;
+        if (!container) return;
+
+        createEffect(function redraw() {
+            var output = ComponentFn();
+            renderTemplate(output, {}, container);
+        });
     }
 
     return {
