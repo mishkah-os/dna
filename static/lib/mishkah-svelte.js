@@ -1,7 +1,7 @@
 /*!
  * mishkah-svelte.js — Svelte 5 (Runes) Layer for Mishkah
  * Provides: mount, state, derived, effect, html
- * 2025-12-07 - Fixed Version (Unix Line Endings + Focus Management)
+ * 2025-12-07 - Fixed Version (DOM Morphing)
  */
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
@@ -42,7 +42,7 @@
         if (!depsMap) return;
         var dep = depsMap.get(key);
         if (!dep) return;
-        // Copy to avoid infinite loop if effect triggers more updates
+
         var effectsToRun = new Set(dep);
         effectsToRun.forEach(function (effectFn) { effectFn(); });
     }
@@ -102,7 +102,15 @@
     // -------------------------------------------------------------------
     // HTML Template (Tagged Literal)
     // -------------------------------------------------------------------
-    var htmlId = 0;
+    var fnCache = new Map();
+    var fnIdCounter = 0;
+
+    function getStableId(fn) {
+        if (!fnCache.has(fn)) {
+            fnCache.set(fn, '__mk_fn_' + (++fnIdCounter) + '__');
+        }
+        return fnCache.get(fn);
+    }
 
     function html(strings) {
         var values = [];
@@ -131,23 +139,91 @@
             if (i >= values.length) continue;
             var val = values[i];
 
-            // Check for event handler: on...="{fn}"
-            // We look at the end of the segment for 'onX='
             var isEventSlot = /on[a-zA-Z]+=[\"']?$/.test(seg);
 
             if (isEventSlot && typeof val === 'function') {
-                var marker = '__mk_sv_ev_' + (++htmlId) + '__';
+                var marker = getStableId(val);
                 fns.push({ type: 'event', id: marker, fn: val });
                 out += marker;
             } else {
-                // Here we evaluate function values immediately for Svelte "pull" model
-                // But we could support fine-grained if we wanted later.
-                // For now, assume it's a value or a nested template.
                 append(typeof val === 'function' ? val() : val);
             }
         }
 
         return { __mishkah_html: true, html: out, fns: fns };
+    }
+
+    // -------------------------------------------------------------------
+    // Morph / Diff (Lightweight DOM Patching)
+    // -------------------------------------------------------------------
+    function morph(fromNode, toNode) {
+        if (fromNode.isEqualNode(toNode)) return;
+
+        // If node types differ, replace
+        if (fromNode.nodeType !== toNode.nodeType || fromNode.tagName !== toNode.tagName) {
+            fromNode.parentNode.replaceChild(toNode.cloneNode(true), fromNode);
+            return;
+        }
+
+        // Text Node
+        if (fromNode.nodeType === 3) {
+            if (fromNode.nodeValue !== toNode.nodeValue) {
+                fromNode.nodeValue = toNode.nodeValue;
+            }
+            return;
+        }
+
+        // Element Node
+        var fromEl = fromNode;
+        var toEl = toNode;
+
+        // Sync Attributes
+        updateAttributes(fromEl, toEl);
+
+        // Sync Children
+        var fromChildren = Array.from(fromEl.childNodes);
+        var toChildren = Array.from(toEl.childNodes);
+
+        for (var i = 0; i < toChildren.length; i++) {
+            if (i < fromChildren.length) {
+                morph(fromChildren[i], toChildren[i]);
+            } else {
+                fromEl.appendChild(toChildren[i].cloneNode(true));
+            }
+        }
+        // Remove excess
+        while (fromChildren.length > toChildren.length) {
+            fromEl.removeChild(fromChildren.pop());
+        }
+    }
+
+    function updateAttributes(fromEl, toEl) {
+        var fromAttrs = Array.from(fromEl.attributes);
+        var toAttrs = Array.from(toEl.attributes);
+
+        // Remove old
+        fromAttrs.forEach(function (attr) {
+            if (!toEl.hasAttribute(attr.name)) {
+                fromEl.removeAttribute(attr.name);
+            }
+        });
+
+        // Add/Update new
+        toAttrs.forEach(function (attr) {
+            if (fromEl.getAttribute(attr.name) !== attr.value) {
+                fromEl.setAttribute(attr.name, attr.value);
+            }
+        });
+
+        // Input Value Special Handling (Preserve Focus)
+        if (fromEl.tagName === 'INPUT' || fromEl.tagName === 'TEXTAREA') {
+            if (fromEl.value !== toEl.value) {
+                // Only update if different and not currently focused (or forcing update)
+                // But generally we DO want to update value if state changed.
+                // The key is that modifying 'value' prop doesn't kill focus.
+                fromEl.value = toEl.value;
+            }
+        }
     }
 
     // -------------------------------------------------------------------
@@ -166,42 +242,27 @@
 
         if (!target) return;
 
-        // [Focus Management]
-        // Save focus state to restore after innerHTML replacement
-        var activeEl = document.activeElement;
-        var selectionStart = null;
-        var selectionEnd = null;
-        var activeId = activeEl ? activeEl.id : null;
+        // Create Virtual DOM for diffing
+        var temp = document.createElement(target.tagName);
+        temp.innerHTML = templateHTML;
 
-        // Try simple selector path if no ID
-        // (This is a rudimentary way to persist focus across innerHTML nuking)
-        if (activeEl && activeEl !== document.body && target.contains(activeEl)) {
-            // Note: If elements don't have IDs, this might be flaky.
-            // We assume input elements in lists might need better handling,
-            // but for this task, basic ID retrieval helps.
-            if (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') {
-                selectionStart = activeEl.selectionStart;
-                selectionEnd = activeEl.selectionEnd;
+        // Morph target children to match temp children
+        var targetChildren = Array.from(target.childNodes);
+        var tempChildren = Array.from(temp.childNodes);
+
+        for (var i = 0; i < tempChildren.length; i++) {
+            if (i < targetChildren.length) {
+                morph(targetChildren[i], tempChildren[i]);
+            } else {
+                target.appendChild(tempChildren[i].cloneNode(true));
             }
         }
-
-        // Nuke and Replace
-        target.innerHTML = templateHTML;
-
-        // Restore Focus
-        if (activeId) {
-            var newActive = target.querySelector('#' + activeId);
-            if (newActive) {
-                newActive.focus();
-                if (selectionStart !== null && (newActive.tagName === 'INPUT' || newActive.tagName === 'TEXTAREA')) {
-                    try {
-                        newActive.setSelectionRange(selectionStart, selectionEnd);
-                    } catch (e) { }
-                }
-            }
+        // Remove excess
+        while (target.childNodes.length > tempChildren.length) {
+            target.removeChild(target.lastChild);
         }
 
-        // Bind Events
+        // Bind Events (Smartly)
         if (!registry.length) return;
         var events = registry.filter(function (r) { return r.type === 'event'; });
 
@@ -216,7 +277,16 @@
                         var entry = events[k];
                         if (attr.value === entry.id && attr.name.indexOf('on') === 0) {
                             var eventName = attr.name.substring(2);
-                            el.addEventListener(eventName, entry.fn.bind(ctx));
+                            // Avoid rebinding if same handler
+                            if (el['__mk_handler_' + eventName] !== entry.fn) {
+                                if (el['__mk_handler_' + eventName]) {
+                                    el.removeEventListener(eventName, el['__mk_bound_' + eventName]);
+                                }
+                                var boundFn = entry.fn.bind(ctx);
+                                el.addEventListener(eventName, boundFn);
+                                el['__mk_handler_' + eventName] = entry.fn;
+                                el['__mk_bound_' + eventName] = boundFn;
+                            }
                             el.removeAttribute(attr.name);
                         }
                     }
@@ -232,16 +302,13 @@
         var container = typeof target === 'string' ? document.querySelector(target) : target;
         if (!container) return;
 
-        // 1. Run ComponentFn ONCE to create state/closure
         var renderFn = ComponentFn();
 
-        // 2. Validate return value
         if (typeof renderFn !== 'function') {
-            console.error('[Mishkah.Svelte] Component must return a render function (e.g., return () => html`...`)');
+            console.error('[Mishkah.Svelte] Component must return a render function');
             return;
         }
 
-        // 3. Create Effect for Reactive Rendering
         effect(function render() {
             var output = renderFn();
             renderTemplate(output, {}, container);
