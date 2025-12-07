@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Mishkah Vue - Teleport Test</title>
-    <script src="../mishkah.core.js"></script>
-    <script src="../mishkah-vue.js"></script>
-    <script src="../mishkah-vue-jsx.js"></script>
+    <script src="../mishkah.core.js?v=debug9"></script>
+    <script src="../mishkah-vue.js?v=debug9"></script>
+    <script src="../mishkah-vue-jsx.js?v=debug9"></script>
     <style>
         body {
             font-family: sans-serif;
@@ -98,13 +98,14 @@
         const Modal = {
             props: ['onClose'],
             render() {
+                console.log('[Modal] Rendering, onClose prop:', this.onClose, 'type:', typeof this.onClose);
                 return (
-                    <div class="modal-backdrop" onClick={this.onClose}>
-                        <div class="modal" onClick={(e) => e.stopPropagation()}>
+                    <div class="modal-backdrop" onClick={() => { console.log('[Modal] Backdrop clicked'); if(this.onClose) this.onClose(); }}>
+                        <div class="modal" onClick={(e) => { console.log('[Modal] Inner modal clicked'); e.stopPropagation(); }}>
                             <h2>🎯 Teleported Modal!</h2>
                             <p>This modal was teleported to #teleport-target using the Teleport component.</p>
                             <p>It's rendered outside the normal component hierarchy.</p>
-                            <button onClick={this.onClose}>Close Modal</button>
+                            <button onClick={() => { console.log('[Modal] Close button clicked!'); if(this.onClose) { console.log('[Modal] Calling onClose'); this.onClose(); } else { console.log('[Modal] ERROR: onClose is', this.onClose); } }}>Close Modal</button>
                         </div>
                     </div>
                 )
@@ -119,13 +120,18 @@
             },
             methods: {
                 openModal() {
+                    console.log('[App] openModal called, showModal was:', this.showModal);
                     this.showModal = true;
+                    console.log('[App] showModal is now:', this.showModal);
                 },
                 closeModal() {
+                    console.log('[App] closeModal called, showModal was:', this.showModal);
                     this.showModal = false;
+                    console.log('[App] showModal is now:', this.showModal);
                 }
             },
             render() {
+                console.log('[App] Render called. showModal:', this.showModal);
                 return (
                     <div>
                         <h3>Click button to test Teleport:</h3>

@@ -137,6 +137,18 @@
             publicThis.$emit = instance.emit;
         }
 
+        // 0. Props (make them accessible on this)
+        var props = instance.vnode.props || {};
+        for (var propKey in props) {
+            (function (k) {
+                Object.defineProperty(publicThis, k, {
+                    configurable: true,
+                    enumerable: true,
+                    get: function () { return instance.vnode.props[k]; }
+                });
+            })(propKey);
+        }
+
         // 1. Methods
         if (options.methods) {
             for (var key in options.methods) {
@@ -260,6 +272,8 @@
         if (options.mounted) onMounted(options.mounted.bind(publicThis));
         if (options.updated) onUpdated(options.updated.bind(publicThis));
         if (options.unmounted) onUnmounted(options.unmounted.bind(publicThis));
+        if (options.activated) onActivated(options.activated.bind(publicThis));
+        if (options.deactivated) onDeactivated(options.deactivated.bind(publicThis));
 
         // 6. Created
         if (options.created) {
@@ -688,6 +702,8 @@
     function onMounted(fn) { if (currentInstance) { if (!currentInstance.mounted) currentInstance.mounted = []; currentInstance.mounted.push(fn) } }
     function onUnmounted(fn) { if (currentInstance) { if (!currentInstance.unmounted) currentInstance.unmounted = []; currentInstance.unmounted.push(fn) } }
     function onUpdated(fn) { if (currentInstance) { if (!currentInstance.updated) currentInstance.updated = []; currentInstance.updated.push(fn) } }
+    function onActivated(fn) { if (currentInstance) { if (!currentInstance.activated) currentInstance.activated = []; currentInstance.activated.push(fn) } }
+    function onDeactivated(fn) { if (currentInstance) { if (!currentInstance.deactivated) currentInstance.deactivated = []; currentInstance.deactivated.push(fn) } }
 
     // GLOBAL INIT & STATE
     var globalState = reactive({ db: { data: {}, env: { lang: 'ar', dir: 'rtl', theme: 'dark' }, i18n: { dict: {} } }, theme: { tokens: {}, vars: {}, current: 'dark' } });
@@ -872,6 +888,181 @@
         return value;
     }
 
+    // -------------------------------------------------------------------
+    // KeepAlive Component
+    // -------------------------------------------------------------------
+    var KeepAlive = {
+        name: 'KeepAlive',
+        __isKeepAlive: true,
+        props: ['include', 'exclude', 'max'],
+        setup: function (props, ctx) {
+            var cache = new Map();
+            var keys = new Set();
+            var currentKey = null;
+            var storage = document.createDocumentFragment(); // Off-screen storage
+            var wrapper = ref(null);
+            var instance = currentInstance;
+            var pendingCacheKey = null;
+            var pendingRestore = null;
+
+            // Helper to get key from VNode
+            function getKey(vnode) {
+                if (vnode.key != null) return vnode.key;
+                return vnode.type ? (vnode.type.name || vnode.type) : 'default';
+            }
+
+            // Helper to match include/exclude (Strings only for now)
+            function matches(pattern, name) {
+                if (!pattern) return false;
+                if (typeof pattern === 'string') return pattern.split(',').indexOf(name) !== -1;
+                if (pattern instanceof RegExp) return pattern.test(name);
+                return false;
+            }
+
+            // Prune cache logic
+            function pruneCache(filter) {
+                cache.forEach(function (vnode, key) {
+                    var name = vnode.type.name;
+                    if (name && (!filter || !filter(name))) {
+                        pruneCacheEntry(key);
+                    }
+                });
+            }
+
+            function pruneCacheEntry(key) {
+                var cached = cache.get(key);
+                if (cached) {
+                    // Unmount properly
+                    var inst = cached.component;
+                    if (inst) {
+                        // We can't easily call unmount, but we can destroy DOM
+                        if (cached.el && cached.el.parentNode) cached.el.parentNode.removeChild(cached.el);
+                    }
+                    cache.delete(key);
+                    keys.delete(key);
+                }
+            }
+
+            // Watch include/exclude
+            // watch(() => props.include, (val) => pruneCache(name => matches(val, name)));
+            // watch(() => props.exclude, (val) => pruneCache(name => !matches(val, name)));
+
+            onMounted(function () {
+                // Initial mount handled by standard Render
+            });
+
+            onUpdated(function () {
+                // After patch, if we had a pending restore, do it now
+                if (pendingRestore) {
+                    var vnode = pendingRestore;
+                    var key = pendingRestore.key;
+                    var el = vnode.el; // The cached EL
+                    var parent = wrapper.value;
+
+                    // Locate where standard VDOM put the placeholder
+                    // Since we returned 'null' (comment), searching for it might be hard if we have siblings
+                    // But KeepAlive usually has one child.
+                    // Let's rely on append logic for now (assuming 1 child).
+
+                    if (parent && el) {
+                        // Clean parent (remove comments/placeholders)
+                        while (parent.firstChild) parent.removeChild(parent.firstChild);
+
+                        parent.appendChild(el);
+
+                        // Activate
+                        if (vnode.component) {
+                            // vnode.component.isDeactivated = false;
+                            if (vnode.component.activated) vnode.component.activated.forEach(function (fn) { fn() });
+                        }
+                    }
+                    pendingRestore = null;
+                }
+            });
+
+            return function () {
+                var children = ctx.slots.default ? ctx.slots.default() : [];
+                var vnode = children[0]; // Support single child
+
+                if (!vnode) {
+                    currentKey = null;
+                    return h('div', { ref: wrapper, 'data-keep-alive': true });
+                }
+
+                var key = getKey(vnode);
+                var name = vnode.type.name;
+
+                // Check include/exclude
+                if (
+                    (props.include && (!name || !matches(props.include, name))) ||
+                    (props.exclude && name && matches(props.exclude, name))
+                ) {
+                    currentKey = key;
+                    return h('div', { ref: wrapper }, [vnode]);
+                }
+
+                // Cache Logic
+                var pendingVNode = cache.get(key);
+
+                // 1. Handle OLD Component (Removal/Caching)
+                // We rely on the fact that 'render' runs BEFORE 'patch'.
+                // If we are switching keys, the OLD component is about to be destroyed by patch.
+                // We must rescue it.
+                if (instance.subTree && instance.subTree.children) {
+                    var oldVNode = instance.subTree.children[0];
+                    // Verify it's a real element/component and different from new
+                    if (oldVNode && oldVNode.el && getKey(oldVNode) !== key) {
+                        // It is the one we are switching AWAY from
+                        // Move to storage
+                        storage.appendChild(oldVNode.el);
+
+                        // Save its instance state if not already saved (or update it)
+                        // Note: oldVNode might be the "null" placeholder if we just restored?
+                        // No, instance.subTree is what VDOM sees.
+                        // If we returned null last time, subTree has comment.
+
+                        // Deactivate hook
+                        if (oldVNode.component && oldVNode.component.deactivated) {
+                            oldVNode.component.deactivated.forEach(function (fn) { fn() });
+                        }
+                    }
+                }
+
+                if (pendingVNode) {
+                    // HIT
+                    vnode.el = pendingVNode.el;
+                    vnode.component = pendingVNode.component;
+                    // Provide a placeholder to VDOM so it doesn't try to create new DOM
+                    // We will manually append the EL in onUpdated
+                    pendingRestore = vnode; // Signal to restore
+
+                    // LRU refresh
+                    keys.delete(key);
+                    keys.add(key);
+
+                    return h('div', { ref: wrapper, 'data-keep-alive': true }, [null]); // Render nothing/comment
+                } else {
+                    // MISS
+                    keys.add(key);
+                    // Prune max
+                    if (props.max && keys.size > parseInt(props.max)) {
+                        pruneCacheEntry(keys.values().next().value);
+                    }
+                    // Store this vnode for future usage
+                    // Note: We can't store it YET because it has no EL/Instance.
+                    // We must wait until it's mounted?
+                    // We can wrap the vnode to capture it after it's mounted?
+
+                    // OR: We store it in cache NOW, and the VDOM populates .el and .component on it!
+                    cache.set(key, vnode);
+
+                    // Render normally
+                    return h('div', { ref: wrapper, 'data-keep-alive': true }, [vnode]);
+                }
+            };
+        }
+    };
+
     // Built-in: Teleport Component
     var teleportId = 0;
     var Teleport = {
@@ -904,7 +1095,25 @@
             // console.log('[Teleport] setup', { id: instance.uid, propsArg: props, actual: actualProps });
 
             var targetEl = null;
+            var wrapper = null;
+            var checkInterval = null;
+            var observer = null;
             var containerId = 'teleport-' + (teleportId++);
+
+            var cleanup = function () {
+                if (wrapper && wrapper.parentNode) {
+                    wrapper.parentNode.removeChild(wrapper);
+                    wrapper = null;
+                }
+                if (observer) {
+                    observer.disconnect();
+                    observer = null;
+                }
+                if (checkInterval) {
+                    clearInterval(checkInterval);
+                    checkInterval = null;
+                }
+            };
 
             onMounted(function () {
                 // Use captured actualProps
@@ -916,54 +1125,69 @@
                     : to;
 
                 if (!targetEl) {
-                    // console.warn('[Teleport] target not found:', to);
                     return;
                 }
 
-                // Find our container by ID and move its children
+                // Create a transparent wrapper to hold our content in the target
+                // This makes cleanup easy (remove wrapper) without wiping targetEl
+                wrapper = document.createElement('div');
+                wrapper.style.display = 'contents';
+                targetEl.appendChild(wrapper);
+
+                // Find our container by ID and move its children to wrapper
                 nextTick(function () {
                     var container = document.getElementById(containerId);
-                    if (container && container.children.length > 0) {
-                        // Move all children to target
-                        // We use append here. Ideally we should track and remove old ones on update.
-                        // But for Modal it's usually 1-to-1.
+                    if (container) {
                         while (container.firstChild) {
-                            targetEl.appendChild(container.firstChild);
+                            wrapper.appendChild(container.firstChild);
                         }
                     }
                 });
+
+                // Watchdog: Monitor when our content gets removed from target
+                // Use MutationObserver to watch targetEl for child removal
+                observer = new MutationObserver(function (mutations) {
+                    mutations.forEach(function (mutation) {
+                        if (mutation.type === 'childList' && mutation.removedNodes) {
+                            for (var i = 0; i < mutation.removedNodes.length; i++) {
+                                if (mutation.removedNodes[i] === wrapper) {
+                                    cleanup();
+                                    return;
+                                }
+                            }
+                        }
+                    });
+                });
+                observer.observe(targetEl, { childList: true });
+
+                // Watchdog: Check if the placeholder element (in main VDOM tree) is removed.
+                // If it is, that means our component was unmounted/hidden.
+                checkInterval = setInterval(function () {
+                    var container = document.getElementById(containerId);
+                    if (!container) {
+                        cleanup();
+                    }
+                }, 200);
+
+                // Also poll wrapper.isConnected as fallback
+                // (Merged into checkInterval or kept separate - keeping separate for safety but cleaning logs)
             });
 
             onUpdated(function () {
-                // For updates, we might need re-resolved props if we support dynamic 'to'.
-                // But setup runs once. We rely on closure actualProps for 'to'.
-                // If 'disabled' changes, we need reactivity.
-                // Assuming props ARE reactive or we re-read vnode?
-                // mishkah-vue current limitation: props updates might not trigger setup re-run or be reactive.
-                // But we can re-read vnode.props from instance if available?
-                // instance.vnode reference might be updated by framework?
-                // Let's stick to closure for now.
-
-                if (actualProps.disabled || !targetEl) return;
+                if (actualProps.disabled || !wrapper) return;
 
                 nextTick(function () {
                     var container = document.getElementById(containerId);
                     if (container) {
-                        // Clear target? Dangerous if multiple teleports.
-                        // But safe for simple modal.
-                        targetEl.innerHTML = '';
+                        wrapper.innerHTML = ''; // Clear previous content in wrapper
                         while (container.firstChild) {
-                            targetEl.appendChild(container.firstChild);
+                            wrapper.appendChild(container.firstChild);
                         }
                     }
                 });
             });
 
-            onUnmounted(function () {
-                if (targetEl) {
-                    targetEl.innerHTML = '';
-                }
-            });
+            onUnmounted(cleanup);
 
             return function () {
                 // Use instance.slots for latest
@@ -1001,16 +1225,24 @@
             return res;
         },
         renderList: renderList,
+        // Lifecycle
         onMounted: onMounted,
         onUnmounted: onUnmounted,
         onUpdated: onUpdated,
+        onActivated: onActivated,
+        onDeactivated: onDeactivated,
         nextTick: nextTick,
+        // Built-ins
+        Teleport: Teleport,
+        KeepAlive: KeepAlive,
+        // Composables
         useDatabase: useDatabase,
         useI18n: useI18n,
         useTheme: useTheme,
+        // Internals (for JSX/Utils)
+        createApp: createApp,
         initMishkah: initMishkah,
         html: html,
-        Teleport: Teleport,
         version: '3.4.0-standalone'
     }
 })
