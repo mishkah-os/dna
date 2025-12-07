@@ -1,11 +1,11 @@
 (function () {
-  'use strict';
+    'use strict';
 
-  // ============================================================
-  // EXAMPLES Data - Counter Example with Multiple Frameworks
-  // ============================================================
+    // ============================================================
+    // EXAMPLES Data - Counter Example with Multiple Frameworks
+    // ============================================================
 
-  const vueComplete = `<!DOCTYPE html>
+    const vueComplete = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -39,7 +39,7 @@
         const flip = () => { lang.value = lang.value === 'en' ? 'ar' : 'en'; document.documentElement.dir = lang.value === 'ar' ? 'rtl' : 'ltr'; };
         return { lang, count, double, t, flip, inc: () => count.value++, dec: () => count.value--, reset: () => count.value = 0 };
       },
-      template: `
+      template: \`
         <div class="card">
           <header style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
             <h1>{{ t('title') }}</h1>
@@ -54,13 +54,13 @@
             <button class="reset" @click="reset">{{ t('reset') }}</button>
           </div>
         </div>
-      `
+      \`
     }).mount('#app');
   </script>
 </body>
 </html>`;
 
-  const reactBasic = `<!DOCTYPE html>
+    const reactBasic = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -104,7 +104,7 @@
 </body>
 </html>`;
 
-  const angularLite = `<!DOCTYPE html>
+    const angularLite = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -128,17 +128,17 @@
     class CounterComponent {
       static selector = 'app-counter';
       static template = function () {
-        return html`
+        return html\`
           <div class="card">
             <h2>Angular-like Component</h2>
-            <p>Count: <strong>${this.count}</strong></p>
+            <p>Count: <strong>\${this.count}</strong></p>
             <div style="display:flex;gap:8px;">
-              <button class="primary" onclick="${this.inc}">Increment</button>
-              <button class="ghost" onclick="${this.dec}">Decrement</button>
+              <button class="primary" onclick="\${this.inc}">Increment</button>
+              <button class="ghost" onclick="\${this.dec}">Decrement</button>
             </div>
-            <p style="color:#94a3b8">${this.message}</p>
+            <p style="color:#94a3b8">\${this.message}</p>
           </div>
-        `;
+        \`;
       }
 
       count = 0;
@@ -153,7 +153,7 @@
 </body>
 </html>`;
 
-  const alpineLite = `<!DOCTYPE html>
+    const alpineLite = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -182,7 +182,7 @@
 </body>
 </html>`;
 
-  const svelteRunes = `<!DOCTYPE html>
+    const svelteRunes = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -209,16 +209,16 @@
       function inc() { s.count++; }
       function updateText(e) { s.text = e.target.value; }
 
-      return () => html`
+      return () => html\`
         <div class="card">
           <h2>Svelte 5 (Runes) 🧡</h2>
-          <p>Count: <strong>${s.count}</strong> (Double: ${double.value})</p>
-          <button onclick="${inc}">Increment</button>
+          <p>Count: <strong>\${s.count}</strong> (Double: \${double.value})</p>
+          <button onclick="\${inc}">Increment</button>
           <hr>
-          <p>${s.text}</p>
-          <input value="${s.text}" oninput="${updateText}" />
+          <p>\${s.text}</p>
+          <input value="\${s.text}" oninput="\${updateText}" />
         </div>
-      `;
+      \`;
     }
 
     mount(Counter, document.getElementById('app-svelte'));
@@ -226,7 +226,7 @@
 </body>
 </html>`;
 
-  const solidSignals = `<!DOCTYPE html>
+    const solidSignals = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -251,17 +251,17 @@
       const double = createMemo(() => count() * 2);
       createEffect(() => console.log('Solid Effect: Count is', count()));
 
-      return html`
+      return html\`
         <div class="card">
           <h2>SolidJS (Signals) 🚀</h2>
-          <p>Count: <strong>${() => count()}</strong> (Double: ${() => double()})</p>
+          <p>Count: <strong>\${() => count()}</strong> (Double: \${() => double()})</p>
           <div style="display:flex;gap:10px;margin-bottom:10px;">
-            <button onclick="${() => setCount(c => c + 1)}">Increment</button>
-            <button onclick="${() => setShow(s => !s)}" style="background:#6366f1">Toggle Info</button>
+            <button onclick="\${() => setCount(c => c + 1)}">Increment</button>
+            <button onclick="\${() => setShow(s => !s)}" style="background:#6366f1">Toggle Info</button>
           </div>
-          ${Show({ when: show, children: html`<p style="color:#94a3b8;font-size:0.9em;"><em>Fine-grained signals demo.</em></p>` })}
+          \${Show({ when: show, children: html\`<p style="color:#94a3b8;font-size:0.9em;"><em>Fine-grained signals demo.</em></p>\` })}
         </div>
-      `;
+     \`;
     }
 
     render(Counter, document.getElementById('app-solid'));
@@ -269,38 +269,447 @@
 </body>
 </html>`;
 
-  const mishkahDsl = `// Mishkah DSL Counter inspired by upgrade test
+    const mishkahDsl = `// Mishkah DSL Counter with i18n & Theme Support
+                // Mishkah DSL Counter - Clean Version
 const database = {
-  showSecondButton: true,
-  counter: 0
-};
+        count: 0,
+        env: { theme: 'dark', lang: 'ar', dir: 'rtl' },
+        i18n: {
+          dict: {
+            'app.title': { ar: 'عداد مشكاة', en: 'Mishkah Counter' },
+            'counter.value': { ar: 'القيمة الحالية', en: 'Current Value' },
+            'increment': { ar: 'زيادة', en: 'Increment' },
+            'decrement': { ar: 'نقصان', en: 'Decrement' },
+            'reset': { ar: 'إعادة تعيين', en: 'Reset' }
+          }
+        }
+      };
 
-const orders = {
-  toggle: { on: ['click'], gkeys: ['btn:toggle'], handler: (e, ctx) => ctx.setState(s => ({ ...s, showSecondButton: !s.showSecondButton })) },
-  inc: { on: ['click'], gkeys: ['btn:inc'], handler: (e, ctx) => ctx.setState(s => ({ ...s, counter: s.counter + 1 })) }
-};
+      const orders = {
+        'counter.increment': {
+          on: ['click'],
+          gkeys: ['inc'],
+          handler: (e, ctx) => ctx.setState(s => ({ ...s, count: s.count + 1 }))
+        },
+        'counter.decrement': {
+          on: ['click'],
+          gkeys: ['dec'],
+          handler: (e, ctx) => ctx.setState(s => ({ ...s, count: Math.max(0, s.count - 1) }))
+        },
+        'counter.reset': {
+          on: ['click'],
+          gkeys: ['reset'],
+          handler: (e, ctx) => ctx.setState(s => ({ ...s, count: 0 }))
+        }
+      };
 
-function App(state) {
-  const D = Mishkah.DSL;
-  const h = Mishkah.h;
-  return D.Div({ attrs: { class: 'container' } }, [
-    D.Div({ attrs: { class: 'test-card' } }, [
-      D.H3({}, ['Test 1: Flat DSL & h()']),
-      D.P({}, ['✅ If you see this, D.Div and D.H3 are working directly.']),
-      h('p', 'Text', { attrs: { style: 'color: blue' } }, ['✅ h() is working.'])
-    ]),
-    D.Div({ attrs: { class: 'test-card' } }, [
-      D.H3({}, ['Counter']),
-      D.Button({ gkey: 'btn:inc', attrs: { class: 'btn' } }, ['Increment Counter: ' + state.counter])
+      function App(db) {
+      const D = Mishkah.DSL;
+      const t = (key) => db.i18n?.dict[key]?.[db.env.lang] || key;
+
+      return D.Containers.Div({
+        attrs: {
+          class: 'counter-app',
+          style: 'min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);'
+        }
+      }, [
+        // Animated background orbs
+        D.Containers.Div({
+          attrs: { class: 'orb orb-1' }
+        }),
+        D.Containers.Div({
+          attrs: { class: 'orb orb-2' }
+        }),
+
+        // Main card
+        D.Containers.Div({
+          attrs: {
+            class: 'counter-card',
+            style: \`
+          position: relative;
+          max-width: 500px;
+          width: 100%;
+          background: rgba(26, 31, 58, 0.8);
+          backdrop-filter: blur(20px);
+          border: 2px solid rgba(42, 165, 160, 0.3);
+          border-radius: 24px;
+          padding: 3rem;
+          box-shadow: 
+            0 20px 60px rgba(42, 165, 160, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        \`
+      }
+    }, [
+      // Corner decorations
+      D.Containers.Div({
+        attrs: {
+          style: 'position: absolute; top: -2px; left: -2px; width: 80px; height: 80px; background: linear-gradient(135deg, rgba(42, 165, 160, 0.6) 0%, transparent 70%); border-radius: 24px 0 40px 0;'
+        }
+      }),
+      D.Containers.Div({
+        attrs: {
+          style: 'position: absolute; bottom: -2px; right: -2px; width: 80px; height: 80px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.6) 0%, transparent 70%); border-radius: 0 24px 0 24px;'
+        }
+      }),
+      
+      // Title
+      D.Text.H1({
+        attrs: { 
+          class: 'counter-title',
+          style: 'text-align: center; font-size: 2.5rem; font-weight: 900; margin-bottom: 0.5rem; background: linear-gradient(135deg, #2aa5a0 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;'
+        }
+      }, [t('app.title')]),
+      
+      // Counter display
+      D.Containers.Div({
+        attrs: {
+          class: 'counter-display',
+          style: \`
+            position: relative;
+            background: rgba(42, 165, 160, 0.1);
+            border: 2px solid rgba(42, 165, 160, 0.3);
+            border-radius: 20px;
+            padding: 3rem 2rem;
+            margin: 2rem 0;
+            text-align: center;
+          \`
+        }
+      }, [
+        // Glow effect based on count
+        D.Containers.Div({
+          attrs: {
+            class: db.count > 0 ? 'counter-glow active' : 'counter-glow'
+          }
+        }),
+        
+        D.Text.Small({
+          attrs: {
+            style: 'display: block; margin-bottom: 1rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.5);'
+          }
+        }, [t('counter.value')]),
+        
+        D.Containers.Div({
+          attrs: { 
+            class: 'counter-number',
+            style: 'font-size: 6rem; font-weight: 900; background: linear-gradient(135deg, #2aa5a0 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;'
+          }
+        }, [String(db.count)])
+      ]),
+      
+      // Buttons
+      D.Containers.Div({
+        attrs: { 
+          class: 'counter-buttons',
+          style: 'display: flex; gap: 0.75rem;'
+        }
+      }, [
+        D.Forms.Button({
+          attrs: { 
+            'data-m-gkey': 'inc',
+            class: 'btn btn-primary'
+          }
+        }, ['➕ ' + t('increment')]),
+        
+        D.Forms.Button({
+          attrs: { 
+            'data-m-gkey': 'dec',
+            class: 'btn btn-secondary'
+          }
+        }, ['➖ ' + t('decrement')]),
+        
+        D.Forms.Button({
+          attrs: { 
+            'data-m-gkey': 'reset',
+            class: 'btn btn-reset'
+          }
+        }, ['🔄 ' + t('reset')])
+      ])
     ])
   ]);
 }
 
-Mishkah.app.setBody(App);
-const app = Mishkah.app.createApp(database, orders);
-app.mount('#app');`;
+// CSS Styles (add to <style> in HTML or separate CSS file)
+const styles = \`
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(30px, -30px); }
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.3; }
+  }
+  
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    animation: float 10s ease-in-out infinite;
+  }
+  
+  .orb-1 {
+    top: 10%;
+    left: 10%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(42, 165, 160, 0.4) 0%, transparent 70%);
+  }
+  
+  .orb-2 {
+    bottom: 10%;
+    right: 10%;
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
+    animation-delay: -5s;
+    animation-direction: reverse;
+  }
+  
+  .counter-glow {
+    position: absolute;
+    inset: -30px;
+    background: radial-gradient(circle, rgba(42, 165, 160, 0.4) 0%, transparent 70%);
+    border-radius: 20px;
+    opacity: 0;
+    filter: blur(40px);
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  
+  .counter-glow.active {
+    opacity: 0.3;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  .counter-number {
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  
+  .btn {
+    flex: 1;
+    padding: 1rem;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+  }
+  
+  .btn:hover::before {
+    transform: translateX(100%);
+  }
+  
+  .btn-primary {
+    background: linear-gradient(135deg, #2aa5a0 0%, #8b5cf6 100%);
+    color: white;
+    box-shadow: 0 4px 14px rgba(42, 165, 160, 0.4);
+  }
+  
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(42, 165, 160, 0.6);
+  }
+  
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+  
+  .btn-secondary {
+    background: rgba(42, 165, 160, 0.2);
+    color: #fff;
+    border: 2px solid rgba(42, 165, 160, 0.5);
+  }
+  
+  .btn-secondary:hover {
+    background: rgba(42, 165, 160, 0.3);
+    transform: translateY(-2px);
+    border-color: rgba(42, 165, 160, 0.8);
+  }
+  
+  .btn-reset {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    min-width: 120px;
+  }
+  
+  .btn-reset:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+\`;
 
-  const vanillaBasic = `<!DOCTYPE html>
+// Inject styles
+// Add styles using Mishkah Head API
+Mishkah.Head.style({
+    id: 'counter-app-styles',
+    content: styles
+});
+
+// Initialize
+const app = Mishkah.app.createApp(database, orders);
+Mishkah.app.setBody(App);
+app.mount('#app');
+`;
+    const mishkahHTMLx = `<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-htmlx="main" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <title>Mishkah HTMLx Counter</title>
+  <script src="../lib/mishkah.js" data-htmlx data-ui></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--background);
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .container {
+      text-align: center;
+      padding: 3rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      box-shadow: var(--shadow-xl);
+    }
+    .counter-value {
+      font-size: 5rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin: 2rem 0;
+    }
+    .btn {
+      padding: 0.75rem 2rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .btn:hover { transform: scale(1.05); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      color: white;
+    }
+    .btn-secondary {
+      background: var(--muted);
+      color: var(--foreground);
+      margin-inline-start: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <template id="main">
+    <script type="application/json" data-m-path="env">
+      {"theme":"dark","lang":"ar","dir":"rtl"}
+    </script>
+
+    <script type="application/json" data-m-path="data">
+      {"count": 0}
+    </script>
+
+    <script type="application/json" data-m-path="i18n.dict">
+      {
+        "app.title": {"ar":"عداد مشكاة","en":"Mishkah Counter"},
+        "increment": {"ar":"زيادة","en":"Increment"},
+        "reset": {"ar":"إعادة تعيين","en":"Reset"}
+      }
+    </script>
+
+    <div class="container">
+         <div style="margin-bottom: 1.5rem;margin-top: -1.5rem;">
+  <ThemeSwitcher onclick="setTheme(event, ctx)" theme={state.env.theme} />
+  <LangSwitcher onclick="setLang(event, ctx)" lang={state.env.lang} style="margin-inline-start: 0.5rem;" />
+</div>
+      <h1 style="color: var(--foreground); margin: 0 0 1rem;">{t('app.title')}</h1>
+      <div class="counter-value">{state.data.count}</div>
+      <div>
+        <button onclick="increment(event, ctx)" class="btn btn-primary">
+          ➕ {t('increment')}
+        </button>
+        <button onclick="reset(event, ctx)" class="btn btn-secondary">
+          🔄 {t('reset')}
+        </button>
+      </div>
+   
+    </div>
+
+    <script>
+      function increment(e, ctx) {
+        ctx.setState(s => {
+          s.data.count++;
+          return s;
+        });
+      }
+      
+      function reset(e, ctx) {
+        ctx.setState(s => {
+          s.data.count = 0;
+          return s;
+        });
+      }
+         function setTheme(e, ctx) {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+
+                const theme = btn.dataset.value;
+
+                ctx.setState(function (s) {
+                    s.env.theme = theme;
+                    return s;
+                });
+
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+                window.dispatchEvent(new CustomEvent('theme-change', { detail: theme }));
+            }
+
+            // Language Logic
+            function setLang(e, ctx) {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+
+                const lang = btn.dataset.value;
+
+                ctx.setState(function (s) {
+                    s.env.lang = lang;
+                    s.env.dir = lang === 'ar' ? 'rtl' : 'ltr';
+                    return s;
+                });
+
+                document.documentElement.lang = lang;
+                document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+                localStorage.setItem('lang', lang);
+            }
+    </script>
+  </template>
+</body>
+</html>`;
+    const vanillaBasic = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -339,7 +748,7 @@ app.mount('#app');`;
 </body>
 </html>`;
 
-  const jqueryBasic = `<!DOCTYPE html>
+    const jqueryBasic = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -372,30 +781,31 @@ app.mount('#app');`;
 </body>
 </html>`;
 
-  window.EXAMPLES = [
-    {
-      id: 'counter',
-      title: { en: 'Counter Example', ar: 'مثال العداد' },
-      description: {
-        en: 'A gallery of counter implementations across modern frameworks.',
-        ar: 'مجموعة أمثلة عداد لأشهر أطر العمل.'
-      },
-      readme: {
-        en: `# Counter Example\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`,
-        ar: `# مثال العداد\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`
-      },
-      wikiId: 'counter-basics',
-      implementations: [
-        { framework: 'vanilla', wikiId: 'vanilla-counter', code: vanillaBasic },
-        { framework: 'jquery', wikiId: 'jquery-counter', code: jqueryBasic },
-        { framework: 'vue', wikiId: 'vue-counter', code: vueComplete },
-        { framework: 'react', wikiId: 'react-counter', code: reactBasic },
-        { framework: 'angular', wikiId: 'angular-counter', code: angularLite },
-        { framework: 'alpine', wikiId: 'alpine-counter', code: alpineLite },
-        { framework: 'svelte', wikiId: 'svelte-counter', code: svelteRunes },
-        { framework: 'solid', wikiId: 'solid-counter', code: solidSignals },
-        { framework: 'mishkah-dsl', wikiId: 'mishkah-dsl-counter', code: mishkahDsl }
-      ]
-    }
-  ];
+    window.EXAMPLES = [
+        {
+            id: 'counter',
+            title: { en: 'Counter Example', ar: 'مثال العداد' },
+            description: {
+                en: 'A gallery of counter implementations across modern frameworks.',
+                ar: 'مجموعة أمثلة عداد لأشهر أطر العمل.'
+            },
+            readme: {
+                en: `# Counter Example\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`,
+                ar: `# مثال العداد\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`
+            },
+            wikiId: 'counter-basics',
+            implementations: [
+                { framework: 'vanilla', wikiId: 'vanilla-counter', code: vanillaBasic },
+                { framework: 'jquery', wikiId: 'jquery-counter', code: jqueryBasic },
+                { framework: 'vue', wikiId: 'vue-counter', code: vueComplete },
+                { framework: 'react', wikiId: 'react-counter', code: reactBasic },
+                { framework: 'angular', wikiId: 'angular-counter', code: angularLite },
+                { framework: 'alpine', wikiId: 'alpine-counter', code: alpineLite },
+                { framework: 'svelte', wikiId: 'svelte-counter', code: svelteRunes },
+                { framework: 'solid', wikiId: 'solid-counter', code: solidSignals },
+                { framework: 'mishkah-dsl', wikiId: 'mishkah-dsl-counter', code: mishkahDsl },
+                { framework: 'mishkah-htmlx', wikiId: 'mishkah-htmlx-counter', code: mishkahHTMLx }
+            ]
+        }
+    ];
 })();
