@@ -1,11 +1,11 @@
 (function () {
-    'use strict';
+  'use strict';
 
-    // ============================================================
-    // EXAMPLES Data - Counter Example with Multiple Frameworks
-    // ============================================================
+  // ============================================================
+  // EXAMPLES Data - Counter Example with Multiple Frameworks
+  // ============================================================
 
-    const vueComplete = `<!DOCTYPE html>
+  const vueComplete = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -60,7 +60,7 @@
 </body>
 </html>`;
 
-    const reactBasic = `<!DOCTYPE html>
+  const reactBasic = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -104,7 +104,7 @@
 </body>
 </html>`;
 
-    const angularLite = `<!DOCTYPE html>
+  const angularLite = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -153,7 +153,7 @@
 </body>
 </html>`;
 
-    const alpineLite = `<!DOCTYPE html>
+  const alpineLite = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -182,7 +182,7 @@
 </body>
 </html>`;
 
-    const svelteRunes = `<!DOCTYPE html>
+  const svelteRunes = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -226,7 +226,7 @@
 </body>
 </html>`;
 
-    const solidSignals = `<!DOCTYPE html>
+  const solidSignals = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -269,7 +269,7 @@
 </body>
 </html>`;
 
-    const mishkahDsl = `// Mishkah DSL Counter with i18n & Theme Support
+  const mishkahDsl = `// Mishkah DSL Counter with i18n & Theme Support
                 // Mishkah DSL Counter - Clean Version
 const database = {
         count: 0,
@@ -565,7 +565,7 @@ const app = Mishkah.app.createApp(database, orders);
 Mishkah.app.setBody(App);
 app.mount('#app');
 `;
-    const mishkahHTMLx = `<!DOCTYPE html>
+  const mishkahHTMLx = `<!DOCTYPE html>
 <html lang="ar" dir="rtl" data-htmlx="main" data-theme="dark">
 <head>
   <meta charset="UTF-8">
@@ -709,7 +709,7 @@ app.mount('#app');
   </template>
 </body>
 </html>`;
-    const vanillaBasic = `<!DOCTYPE html>
+  const vanillaBasic = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -748,7 +748,7 @@ app.mount('#app');
 </body>
 </html>`;
 
-    const jqueryBasic = `<!DOCTYPE html>
+  const jqueryBasic = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -781,31 +781,31 @@ app.mount('#app');
 </body>
 </html>`;
 
-    window.EXAMPLES = [
-        {
-            id: 'counter',
-            title: { en: 'Counter Example', ar: 'مثال العداد' },
-            description: {
-                en: 'A gallery of counter implementations across modern frameworks.',
-                ar: 'مجموعة أمثلة عداد لأشهر أطر العمل.'
-            },
-            readme: {
-                en: `# Counter Example\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`,
-                ar: `# مثال العداد\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`
-            },
-            wikiId: 'counter-basics',
-            implementations: [
-                { framework: 'vanilla', wikiId: 'vanilla-counter', code: vanillaBasic },
-                { framework: 'jquery', wikiId: 'jquery-counter', code: jqueryBasic },
-                { framework: 'vue', wikiId: 'vue-counter', code: vueComplete },
-                { framework: 'react', wikiId: 'react-counter', code: reactBasic },
-                { framework: 'angular', wikiId: 'angular-counter', code: angularLite },
-                { framework: 'alpine', wikiId: 'alpine-counter', code: alpineLite },
-                { framework: 'svelte', wikiId: 'svelte-counter', code: svelteRunes },
-                { framework: 'solid', wikiId: 'solid-counter', code: solidSignals },
-                { framework: 'mishkah-dsl', wikiId: 'mishkah-dsl-counter', code: mishkahDsl },
-                { framework: 'mishkah-htmlx', wikiId: 'mishkah-htmlx-counter', code: mishkahHTMLx }
-            ]
-        }
-    ];
+  window.EXAMPLES = [
+    {
+      id: 'counter',
+      title: { en: 'Counter Example', ar: 'مثال العداد' },
+      description: {
+        en: 'A gallery of counter implementations across modern frameworks.',
+        ar: 'مجموعة أمثلة عداد لأشهر أطر العمل.'
+      },
+      readme: {
+        en: `# Counter Example\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`,
+        ar: `# مثال العداد\n\nقارن بين أكثر من 8 أطر عمل في نفس الوقت.`
+      },
+      wikiId: 'counter-basics',
+      implementations: [
+        { framework: 'vanilla', wikiId: 'vanilla-counter', code: vanillaBasic },
+        { framework: 'jquery', wikiId: 'jquery-counter', code: jqueryBasic },
+        { framework: 'vue', wikiId: 'vue-counter', code: vueComplete },
+        { framework: 'react', wikiId: 'react-counter', code: reactBasic },
+        { framework: 'angular', wikiId: 'angular-counter', code: angularLite },
+        { framework: 'alpine', wikiId: 'alpine-counter', code: alpineLite },
+        { framework: 'svelte', wikiId: 'svelte-counter', code: svelteRunes },
+        { framework: 'solid', wikiId: 'solid-counter', code: solidSignals },
+        { framework: 'mishkah-dsl', wikiId: 'mishkah-dsl-counter', code: mishkahDsl },
+        { framework: 'mishkah-htmlx', wikiId: 'mishkah-htmlx-counter', code: mishkahHTMLx }
+      ]
+    }
+  ];
 })();
