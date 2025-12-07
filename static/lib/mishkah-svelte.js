@@ -1,208 +1,197 @@
 /*!
  * mishkah-svelte.js — Svelte 5 (Runes) Layer for Mishkah
- * Provides: mount, state, derived, effect
- * 2025-12-03
- * Upgraded: Dependency Tracking & Memoization
+ * Provides: mount, state, derived, effect, html
+ * 2025-12-03 (standalone, non-VDOM)
  */
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
-        define(['mishkah', 'mishkah-react'], function (M, R) { return factory(root, M, R); });
+        define(['mishkah'], function (M) { return factory(root, M); });
     } else if (typeof module === 'object' && module.exports) {
-        module.exports = factory(root, require('mishkah'), require('mishkah-react'));
+        module.exports = factory(root, require('mishkah'));
     } else {
         root.Mishkah = root.Mishkah || {};
-        root.Mishkah.Svelte = factory(root, root.Mishkah, root.Mishkah.React);
+        root.Mishkah.Svelte = factory(root, root.Mishkah);
     }
-}(typeof window !== 'undefined' ? window : this, function (global, M, R) {
+}(typeof window !== 'undefined' ? window : this, function (global, M) {
     "use strict";
 
-    if (!R || !R.render) {
-        console.error('Mishkah.Svelte requires Mishkah.React (mishkah-react.js).');
-        return {};
-    }
-
     // -------------------------------------------------------------------
-    // Reactivity System (Dependency Tracking)
+    // Tiny Dependency Graph (no VDOM, fine-grained)
     // -------------------------------------------------------------------
-    var trackingContext = null; // { deps: Set<string> }
+    var bucket = new WeakMap();
+    var activeEffect = null;
+    var effectStack = [];
 
-    function track(target, prop) {
-        if (trackingContext) {
-            // Create a unique ID for the property: "ObjectId:PropName"
-            // We need a stable ID for the target object.
-            // We can use a WeakMap to assign IDs to objects.
-            var id = getObjectId(target);
-            trackingContext.deps.add(id + ':' + prop);
+    function track(target, key) {
+        if (!activeEffect) return;
+        var depsMap = bucket.get(target);
+        if (!depsMap) {
+            depsMap = new Map();
+            bucket.set(target, depsMap);
         }
-    }
-
-    var objectIds = new WeakMap();
-    var uuid = 0;
-    function getObjectId(obj) {
-        if (!objectIds.has(obj)) {
-            objectIds.set(obj, ++uuid);
+        var dep = depsMap.get(key);
+        if (!dep) {
+            dep = new Set();
+            depsMap.set(key, dep);
         }
-        return objectIds.get(obj);
+        dep.add(activeEffect);
     }
 
-    // -------------------------------------------------------------------
-    // Svelte 5 Runes Emulation
-    // -------------------------------------------------------------------
-
-    // 1. $state (Deep Proxy with Tracking)
-    function state(initialValue) {
-        // We use React's useState to trigger re-renders
-        var hook = R.useState(initialValue);
-        var val = hook[0];
-        var setVal = hook[1];
-
-        // We need to persist the proxy across renders so object identity is stable
-        // But val changes on every render (it's the new state).
-        // Actually, we want the proxy to wrap the *current* val.
-        // If we recreate proxy every time, 'this' references might break?
-        // Svelte 5 runes usually return a stable object.
-
-        // Let's use useMemo to create the proxy, but it needs to point to current val.
-        // This is tricky in React.
-        // Alternative: The proxy target is a stable "box", and we update the box content?
-        // Yes!
-
-        var box = R.useState({ current: initialValue })[0]; // Stable box
-        // But wait, if we mutate box.current, React doesn't know.
-        // We need setVal to trigger render.
-
-        // Let's stick to the previous approach but add tracking.
-        // We recreate proxy every render. It's fine for this emulation.
-
-        function createProxy(target) {
-            if (typeof target !== 'object' || target === null) return target;
-
-            return new Proxy(target, {
-                get: function (obj, prop) {
-                    track(obj, prop);
-                    return createProxy(obj[prop]);
-                },
-                set: function (obj, prop, value) {
-                    obj[prop] = value;
-                    // Trigger update
-                    var newVal = Array.isArray(val) ? val.slice() : Object.assign({}, val);
-                    setVal(newVal);
-                    return true;
-                }
-            });
-        }
-
-        return createProxy(val);
+    function trigger(target, key) {
+        var depsMap = bucket.get(target);
+        if (!depsMap) return;
+        var dep = depsMap.get(key);
+        if (!dep) return;
+        dep.forEach(function (effectFn) { effectFn(); });
     }
 
-    // 2. $derived (Memoized)
-    function derived(fn) {
-        // We want to re-calculate ONLY if dependencies change.
-        // We use useRef to store cache: { value, deps: Set }
-        var cache = R.useState({ value: undefined, deps: new Set(), dirty: true })[0];
-
-        // Check if we need to re-run
-        // But wait, how do we know if deps changed?
-        // We don't have a global signal graph.
-        // In this React-based emulation, "deps changed" means the component re-rendered.
-        // But we don't know WHICH state changed.
-        // We only know that *some* state changed and triggered a render.
-
-        // To implement true "smart" derived, we need to compare old values of deps?
-        // Or just re-run?
-        // If we just re-run, it's not memoized.
-
-        // Svelte 5 deriveds are pull-based. They run when accessed.
-        // If we want to memoize, we need to know if inputs changed.
-        // Since we lack a fine-grained graph, let's do a simple optimization:
-        // We execute the function. If the result is same as cached, return cached object identity?
-        // No, that's not helpful.
-
-        // Let's implement "Run Always, Check Equality" (React useMemo style)
-        // But useMemo requires explicit deps array. We don't have it.
-
-        // OK, for this emulation, let's just execute it.
-        // Real Svelte is smarter.
-        // But we CAN track dependencies during execution!
-        // And if we are inside an effect, we bubble up the tracking?
-
-        return {
-            get value() {
-                // If we are inside another tracking context (e.g. effect), 
-                // we should probably track this derived value?
-                // For simplicity, let's just run the function.
-                return fn();
+    function effect(fn) {
+        var runner = function () {
+            activeEffect = runner;
+            effectStack.push(runner);
+            try { fn(); } finally {
+                effectStack.pop();
+                activeEffect = effectStack[effectStack.length - 1] || null;
             }
+        };
+        runner();
+        return runner;
+    }
+
+    // -------------------------------------------------------------------
+    // State / Derived
+    // -------------------------------------------------------------------
+    var proxyCache = new WeakMap();
+    function createProxy(target) {
+        if (typeof target !== 'object' || target === null) return target;
+        if (proxyCache.has(target)) return proxyCache.get(target);
+
+        var proxy = new Proxy(target, {
+            get: function (obj, prop) {
+                track(obj, prop);
+                return createProxy(obj[prop]);
+            },
+            set: function (obj, prop, value) {
+                obj[prop] = value;
+                trigger(obj, prop);
+                return true;
+            }
+        });
+        proxyCache.set(target, proxy);
+        return proxy;
+    }
+
+    function state(initialValue) {
+        return createProxy(initialValue);
+    }
+
+    function derived(fn) {
+        var cache;
+        var recompute = function () {
+            cache = fn();
+        };
+        effect(recompute);
+        return {
+            get value() { return cache; }
         };
     }
 
-    // 3. $effect (Smart - Runs only when deps change)
-    function effect(fn) {
-        // We use useRef to store previous dependencies
-        var meta = R.useState({ deps: new Set(), cleanup: null, firstRun: true })[0];
-
-        R.useEffect(function () {
-            // 1. Capture dependencies
-            var capturedDeps = new Set();
-            var prevContext = trackingContext;
-            trackingContext = { deps: capturedDeps };
-
-            // 2. Run function (if deps changed or first run)
-            // But wait, we are ALREADY running inside useEffect (post-render).
-            // We need to know if we SHOULD run the user's function.
-            // We can't know if deps changed BEFORE running the function to get deps.
-            // This is the "Chicken and Egg" problem of runtime tracking without explicit signals.
-
-            // Solution: We must run the function to know deps.
-            // So we run it. And we check if the deps we found match the previous deps?
-            // No, that doesn't tell us if values changed.
-
-            // Actually, since the component re-rendered, something changed.
-            // If we run the function, we are "updating" the effect.
-            // This mimics Svelte's behavior: statements run when state changes.
-            // But we want to avoid running if UNRELATED state changed.
-
-            // To do that, we need to compare the VALUES of the dependencies.
-            // But we only stored property names (IDs). We didn't store values.
-
-            // LIMITATION: In this React-based runtime emulation, 
-            // effects will run on EVERY component render (like useEffect without deps).
-            // Implementing true fine-grained avoidance here is very complex (needs a full graph).
-
-            // So, we will just run it, but handle cleanup correctly.
-
-            if (meta.cleanup) meta.cleanup();
-
-            var result = fn();
-
-            trackingContext = prevContext; // Restore
-
-            if (typeof result === 'function') {
-                meta.cleanup = result;
-            }
-
-        }); // No deps array passed to R.useEffect -> runs on every render
-    }
-
-    // 4. Mount
-    function mount(ComponentFn, target) {
-        function Wrapper() {
-            var result = ComponentFn();
-            if (typeof result === 'function') return result();
-            return result;
+    // -------------------------------------------------------------------
+    // Template helper
+    // -------------------------------------------------------------------
+    var htmlId = 0;
+    function html(strings) {
+        var values = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            values[_i - 1] = arguments[_i];
         }
-        R.render(Wrapper, target);
+        var fns = [];
+        var out = '';
+
+        function append(val) {
+            if (val && val.__mishkah_html) {
+                out += val.html;
+                fns = fns.concat(val.fns || []);
+                return;
+            }
+            if (Array.isArray(val)) {
+                val.forEach(function (v) { append(v); });
+                return;
+            }
+            out += (val == null ? '' : val);
+        }
+
+        for (var i = 0; i < strings.length; i++) {
+            var seg = strings[i];
+            out += seg;
+            if (i >= values.length) continue;
+            var val = values[i];
+            var isEventSlot = /on[a-zA-Z]+=["']?$/.test(seg);
+
+            if (typeof val === 'function' && isEventSlot) {
+                var marker = '__mk_sv_fn_' + (++htmlId) + '__';
+                fns.push({ id: marker, fn: val });
+                out += marker;
+            } else {
+                append(typeof val === 'function' ? val() : val);
+            }
+        }
+
+        return { __mishkah_html: true, html: out, fns: fns };
+    }
+
+    function renderTemplate(tpl, ctx, target) {
+        var templateHTML = '';
+        var fnList = [];
+
+        if (tpl && tpl.__mishkah_html) {
+            templateHTML = tpl.html;
+            fnList = tpl.fns || [];
+        } else {
+            templateHTML = tpl == null ? '' : String(tpl);
+        }
+
+        if (!target) return;
+        target.innerHTML = templateHTML;
+
+        if (!fnList.length) return;
+        var all = target.querySelectorAll('*');
+        for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            var attrs = Array.from(el.attributes);
+            for (var j = 0; j < attrs.length; j++) {
+                var attr = attrs[j];
+                for (var k = 0; k < fnList.length; k++) {
+                    var entry = fnList[k];
+                    if (attr.value === entry.id && attr.name.indexOf('on') === 0) {
+                        el.addEventListener(attr.name.substring(2), entry.fn.bind(ctx));
+                        el.removeAttribute(attr.name);
+                    }
+                }
+            }
+        }
     }
 
     // -------------------------------------------------------------------
-    // Exports
+    // Mount (component rerenders when used state changes)
     // -------------------------------------------------------------------
+    function mount(ComponentFn, target) {
+        var container = typeof target === 'string' ? document.querySelector(target) : target;
+        if (!container) return;
+
+        effect(function render() {
+            var output = ComponentFn();
+            if (typeof output === 'function') output = output();
+            renderTemplate(output, {}, container);
+        });
+    }
+
     return {
-        mount: mount,
         state: state,
         derived: derived,
         effect: effect,
-        html: R.html
+        mount: mount,
+        html: html
     };
 
 }));

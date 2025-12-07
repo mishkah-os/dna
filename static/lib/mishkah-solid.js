@@ -1,86 +1,143 @@
 /*!
- * mishkah-solid.js — SolidJS (Signals) Layer for Mishkah
- * Provides: createSignal, createEffect, createMemo, createComponent
- * 2025-12-03
+ * mishkah-solid.js — SolidJS-like Signals Layer for Mishkah
+ * Provides: createSignal, createEffect, createMemo, render, html, Show, For
+ * 2025-12-12 (signal-driven, Mishkah-core template renderer)
  */
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
-        define(['mishkah', 'mishkah-react'], function (M, R) { return factory(root, M, R); });
+        define(['mishkah'], function (M) { return factory(root, M); });
     } else if (typeof module === 'object' && module.exports) {
-        module.exports = factory(root, require('mishkah'), require('mishkah-react'));
+        module.exports = factory(root, require('mishkah'));
     } else {
         root.Mishkah = root.Mishkah || {};
-        root.Mishkah.Solid = factory(root, root.Mishkah, root.Mishkah.React);
+        root.Mishkah.Solid = factory(root, root.Mishkah);
     }
-}(typeof window !== 'undefined' ? window : this, function (global, M, R) {
+}(typeof window !== 'undefined' ? window : this, function (global, M) {
     "use strict";
 
-    if (!R || !R.render) {
-        console.error('Mishkah.Solid requires Mishkah.React (mishkah-react.js).');
-        return {};
-    }
-
     // -------------------------------------------------------------------
-    // SolidJS Signals Emulation (Runtime)
+    // Signal graph (fine-grained reactivity)
     // -------------------------------------------------------------------
+    var activeEffect = null;
+    var effectStack = [];
 
-    // 1. createSignal
     function createSignal(initialValue) {
-        // In Solid, signals are independent of components.
-        // But in our VDOM emulation, we need to trigger re-renders.
-        // We use React's useState for the "trigger", but keep value external?
-        // Actually, to support "fine-grained" feel, we just use useState
-        // and return [getter, setter].
+        var value = initialValue;
+        var subscribers = new Set();
 
-        var hook = R.useState(initialValue);
-        var val = hook[0];
-        var setVal = hook[1];
+        function getter() {
+            if (activeEffect) subscribers.add(activeEffect);
+            return value;
+        }
 
-        var getter = function () { return val; };
-        var setter = function (newValue) {
-            // Support function update: setSignal(c => c + 1)
-            if (typeof newValue === 'function') {
-                setVal(function (prev) { return newValue(prev); });
-            } else {
-                setVal(newValue);
-            }
-        };
+        function setter(next) {
+            value = (typeof next === 'function') ? next(value) : next;
+            subscribers.forEach(function (fn) { fn(); });
+        }
 
         return [getter, setter];
     }
 
-    // 2. createEffect
     function createEffect(fn) {
-        // Solid effects run automatically when dependencies change.
-        // In this runtime emulation, we don't track dependencies automatically.
-        // So we just run it on every render (useEffect with no deps).
-        // This is less efficient than real Solid, but correct for emulation.
-        R.useEffect(fn);
+        var runner = function () {
+            activeEffect = runner;
+            effectStack.push(runner);
+            try { fn(); } finally {
+                effectStack.pop();
+                activeEffect = effectStack[effectStack.length - 1] || null;
+            }
+        };
+        runner();
+        return runner;
     }
 
-    // 3. createMemo (Derived)
     function createMemo(fn) {
-        // Simple derived value
-        return function () { return fn(); };
+        var cache;
+        var compute = function () { cache = fn(); };
+        createEffect(compute);
+        return function () { return cache; };
     }
 
-    // 4. render (Mount)
-    function render(ComponentFn, target) {
-        // Solid components run once.
-        // BUT, since we are emulating via React/VDOM, our components MUST re-run to produce new VNodes.
-        // So we just pass the component to R.render.
-        // The user writes "Solid-style" code (signals), but it runs like React.
+    // -------------------------------------------------------------------
+    // Template helper (HTML + event wiring)
+    // -------------------------------------------------------------------
+    var htmlId = 0;
+    function html(strings) {
+        var values = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            values[_i - 1] = arguments[_i];
+        }
+        var fns = [];
+        var out = '';
 
-        R.render(ComponentFn, target);
+        function append(val) {
+            if (val && val.__mishkah_html) {
+                out += val.html;
+                fns = fns.concat(val.fns || []);
+                return;
+            }
+            if (Array.isArray(val)) {
+                val.forEach(function (v) { append(v); });
+                return;
+            }
+            out += (val == null ? '' : val);
+        }
+
+        for (var i = 0; i < strings.length; i++) {
+            var seg = strings[i];
+            out += seg;
+            if (i >= values.length) continue;
+            var val = values[i];
+            var isEventSlot = /on[a-zA-Z]+=["']?$/.test(seg);
+
+            if (typeof val === 'function' && isEventSlot) {
+                var marker = '__mk_sd_fn_' + (++htmlId) + '__';
+                fns.push({ id: marker, fn: val });
+                out += marker;
+            } else {
+                append(typeof val === 'function' ? val() : val);
+            }
+        }
+
+        return { __mishkah_html: true, html: out, fns: fns };
     }
 
-    // 5. Show/For (Control Flow Components)
-    // Solid uses components for control flow.
-    // We can implement simple versions.
+    function renderTemplate(tpl, ctx, target) {
+        var templateHTML = '';
+        var fnList = [];
 
+        if (tpl && tpl.__mishkah_html) {
+            templateHTML = tpl.html;
+            fnList = tpl.fns || [];
+        } else {
+            templateHTML = tpl == null ? '' : String(tpl);
+        }
+
+        if (!target) return;
+        target.innerHTML = templateHTML;
+
+        if (!fnList.length) return;
+        var all = target.querySelectorAll('*');
+        for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            var attrs = Array.from(el.attributes);
+            for (var j = 0; j < attrs.length; j++) {
+                var attr = attrs[j];
+                for (var k = 0; k < fnList.length; k++) {
+                    var entry = fnList[k];
+                    if (attr.value === entry.id && attr.name.indexOf('on') === 0) {
+                        el.addEventListener(attr.name.substring(2), entry.fn.bind(ctx));
+                        el.removeAttribute(attr.name);
+                    }
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Control helpers
+    // -------------------------------------------------------------------
     function Show(props) {
-        // props.when is a boolean or getter?
-        // In our emulation, it's likely a value passed from parent re-render.
         var condition = typeof props.when === 'function' ? props.when() : props.when;
         return condition ? props.children : (props.fallback || null);
     }
@@ -88,29 +145,31 @@
     function For(props) {
         var list = typeof props.each === 'function' ? props.each() : props.each;
         if (!Array.isArray(list)) return null;
-
-        // props.children is a function: (item, index) => ...
-        // In HTMLx, children are usually VNodes.
-        // We need to support function as child for <For>
-        // But M.h normalizes children.
-        // Let's assume user calls it like: For({ each: list, children: (item) => ... })
-
         if (typeof props.children === 'function') {
-            return list.map(props.children);
+            return list.map(function (item, idx) { return props.children(item, idx); });
         }
         return null;
     }
 
     // -------------------------------------------------------------------
-    // Exports
+    // Root renderer (signal-aware)
     // -------------------------------------------------------------------
+    function render(ComponentFn, target) {
+        var container = typeof target === 'string' ? document.querySelector(target) : target;
+        if (!container) return;
+
+        createEffect(function redraw() {
+            var output = ComponentFn();
+            renderTemplate(output, {}, container);
+        });
+    }
+
     return {
         createSignal: createSignal,
         createEffect: createEffect,
         createMemo: createMemo,
         render: render,
-        html: R.html,
-        // Components
+        html: html,
         Show: Show,
         For: For
     };
