@@ -5,20 +5,15 @@
  */
 (function (root, factory) {
     if (typeof define === 'function' && define.amd) {
-        define(['mishkah', 'mishkah-svelte'], function (M, S) { return factory(root, M, S); });
+        define(['mishkah'], function (M) { return factory(root, M); });
     } else if (typeof module === 'object' && module.exports) {
-        module.exports = factory(root, require('mishkah'), require('mishkah-svelte'));
+        module.exports = factory(root, require('mishkah'));
     } else {
         root.Mishkah = root.Mishkah || {};
-        root.Mishkah.Alpine = factory(root, root.Mishkah, root.Mishkah.Svelte);
+        root.Mishkah.Alpine = factory(root, root.Mishkah);
     }
-}(typeof window !== 'undefined' ? window : this, function (global, M, S) {
+}(typeof window !== 'undefined' ? window : this, function (global, M) {
     "use strict";
-
-    if (!S || !S.state) {
-        console.error('Mishkah.Alpine requires Mishkah.Svelte (mishkah-svelte.js) for reactivity.');
-        return {};
-    }
 
     // -------------------------------------------------------------------
     // Alpine-like Direct DOM Engine
