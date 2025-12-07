@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Mishkah Vue - Debug Features</title>
+    <script src="../mishkah.core.js"></script>
+    <script src="../mishkah-vue-v2.js"></script>
+    <script src="../mishkah-vue-jsx.js"></script>
+    <style>
+        .pass {
+            color: green;
+        }
+
+        .fail {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app"></div>
+
+    <script type="text/mishkah-vue">
+        const Child = {
+            inject: ['val'],
+            render() {
+                return <div>Inject: <span id="inject-res">{this.val || 'FAIL'}</span></div>
+            }
+        }
+
+        const Parent = {
+            provide: { val: 'PASS' },
+            render() { return <div><Child /></div> }
+        }
+
+        const App = {
+            data() {
+                return {
+                    list: ['A'],
+                    deepObj: { a: { b: 0 } },
+                    watchRes: 'WAIT'
+                }
+            },
+            watch: {
+                deepObj: {
+                    handler() { this.watchRes = 'PASS' },
+                    deep: true
+                }
+            },
+            methods: {
+                pushItem() { this.list.push('B') },
+                incDeep() { this.deepObj.a.b++ }
+            },
+            render() {
+                return (
+                    <div>
+                        <h3>Debug</h3>
+                        <Parent />
+                        <hr />
+                        <button id="btn-push" onClick={this.pushItem}>Push</button>
+                        <ul id="list">
+                            <li v-for="i in this.list">{i}</li>
+                        </ul>
+                        <hr />
+                        <button id="btn-deep" onClick={this.incDeep}>Deep</button>
+                        <div id="watch-res">Watch: {this.watchRes}</div>
+                    </div>
+                )
+            }
+        }
+
+        Mishkah.Vue.createApp(App).mount('#app');
+    </script>
+</body>
+
+</html>

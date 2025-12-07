@@ -186,6 +186,8 @@
                 // DIRECTIVE HANDLING
                 if (name === 'v-if') {
                     directives.if = val;
+                } else if (name === 'v-for') {
+                    directives.for = val;
                 } else if (name.indexOf('v-model') === 0) {
                     directives.model = { ref: val, modifiers: name.split('.').slice(1) };
                 } else if (name.startsWith('@') || name.startsWith('v-on:') || (name.startsWith('on') && name.indexOf('.') > 0)) {
@@ -270,11 +272,35 @@
             props.push("onInput:($event) => { " + assign + " }");
         }
 
-        var code = "Mishkah.Vue.h('" + tagName + "', " + formatProps(props) + ", [" + children.join(',') + "])";
+        var tagArg = (tagName[0] === tagName[0].toUpperCase() && tagName[0] !== tagName[0].toLowerCase())
+            ? tagName
+            : "'" + tagName + "'";
+
+        var code = "Mishkah.Vue.h(" + tagArg + ", " + formatProps(props) + ", [" + children.join(',') + "])";
 
         if (directives.if) {
             // v-if ternary wrapper
             code = "(" + directives.if + ") ? " + code + " : null";
+        }
+
+        if (directives.for) {
+            // v-for handling
+            var raw = directives.for.trim();
+            if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+                raw = raw.slice(1, -1);
+            }
+
+            // Syntax: "item in items" or "(item, index) in items"
+            var parts = raw.split(/\s+(?:in|of)\s+/);
+            if (parts.length === 2) {
+                var lhs = parts[0].trim();
+                var rhs = parts[1].trim();
+                // cleanup parens
+                if (lhs.startsWith('(') && lhs.endsWith(')')) {
+                    lhs = lhs.slice(1, -1);
+                }
+                code = "Mishkah.Vue.renderList(" + rhs + ", (" + lhs + ") => " + code + ")";
+            }
         }
 
         return { code: code, next: nextPos };
