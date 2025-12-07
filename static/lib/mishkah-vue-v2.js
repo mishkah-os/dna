@@ -813,13 +813,19 @@
         var oldVal;
         var opts = options || {};
 
+        // Wrap getter for deep tracking
+        if (opts.deep) {
+            var baseGetter = getter;
+            getter = function () {
+                var val = baseGetter();
+                traverse(val); // Trigger tracking for all nested props
+                return val;
+            }
+        }
+
         var job = function () {
             // Re-run getter to track and get new value
             var newVal = runner();
-            if (opts.deep) {
-                try { JSON.stringify(newVal) } catch (e) { }
-            }
-
             if (newVal !== oldVal || opts.deep) {
                 cb(newVal, oldVal);
                 oldVal = opts.deep ? JSON.parse(JSON.stringify(newVal)) : newVal;
@@ -831,15 +837,26 @@
         // Initial Run
         if (opts.immediate) {
             oldVal = runner();
-            if (opts.deep) { try { JSON.stringify(oldVal) } catch (e) { } }
             cb(oldVal, undefined);
             oldVal = opts.deep ? JSON.parse(JSON.stringify(oldVal)) : oldVal;
         } else {
             oldVal = runner();
-            if (opts.deep) { try { JSON.stringify(oldVal) } catch (e) { } }
             oldVal = opts.deep ? JSON.parse(JSON.stringify(oldVal)) : oldVal;
         }
         return runner;
+    }
+
+    function traverse(value, seen) {
+        if (!typeof value === 'object' || value === null) return value;
+        seen = seen || new Set();
+        if (seen.has(value)) return value;
+        seen.add(value);
+        if (Array.isArray(value)) {
+            for (var i = 0; i < value.length; i++) traverse(value[i], seen);
+        } else {
+            for (var key in value) traverse(value[key], seen);
+        }
+        return value;
     }
 
     return {

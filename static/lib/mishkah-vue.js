@@ -106,10 +106,14 @@
 
         instance.emit = emitFn; // Internal access
 
+        // Init slots
+        updateSlots(instance, instance.vnode.children);
+
         var setup = instance.type.setup;
         if (setup) {
             currentInstance = instance;
-            var setupResult = setup(instance.type.props || {}, { emit: emitFn });
+            // Passed vnode.props (values) instead of type.props (definitions)
+            var setupResult = setup(instance.vnode.props || {}, { emit: emitFn, slots: instance.slots || {} });
             currentInstance = null;
             handleSetupResult(instance, setupResult);
         } else {
@@ -490,6 +494,8 @@
             // If it's a Component VNode (now resolved)
             if (typeof vnode.type === 'object') {
                 var instance = vnode.component;
+                var isNewInstance = !instance;
+
                 if (!instance) {
                     // Pass parentInstance for inheritance
                     instance = vnode.component = createComponentInstance(vnode, parentInstance);
@@ -501,6 +507,13 @@
                 instance.subTree = subTree;
 
                 var expandedTree = expandComponentTree(subTree, instance);
+
+                // Call mounted hooks for newly created instances
+                if (isNewInstance && instance.mounted) {
+                    nextTick(function () {
+                        instance.mounted.forEach(function (hook) { hook(); });
+                    });
+                }
 
                 // FORWARDING COMPONENT PROPS (Ref, Key, Class, Style -> Fallthrough)
                 if (expandedTree && typeof expandedTree === 'object') {
@@ -813,13 +826,19 @@
         var oldVal;
         var opts = options || {};
 
+        // Wrap getter for deep tracking
+        if (opts.deep) {
+            var baseGetter = getter;
+            getter = function () {
+                var val = baseGetter();
+                traverse(val); // Trigger tracking for all nested props
+                return val;
+            }
+        }
+
         var job = function () {
             // Re-run getter to track and get new value
             var newVal = runner();
-            if (opts.deep) {
-                try { JSON.stringify(newVal) } catch (e) { }
-            }
-
             if (newVal !== oldVal || opts.deep) {
                 cb(newVal, oldVal);
                 oldVal = opts.deep ? JSON.parse(JSON.stringify(newVal)) : newVal;
@@ -831,18 +850,140 @@
         // Initial Run
         if (opts.immediate) {
             oldVal = runner();
-            if (opts.deep) { try { JSON.stringify(oldVal) } catch (e) { } }
             cb(oldVal, undefined);
             oldVal = opts.deep ? JSON.parse(JSON.stringify(oldVal)) : oldVal;
         } else {
             oldVal = runner();
-            if (opts.deep) { try { JSON.stringify(oldVal) } catch (e) { } }
             oldVal = opts.deep ? JSON.parse(JSON.stringify(oldVal)) : oldVal;
         }
         return runner;
     }
 
+    function traverse(value, seen) {
+        if (!typeof value === 'object' || value === null) return value;
+        seen = seen || new Set();
+        if (seen.has(value)) return value;
+        seen.add(value);
+        if (Array.isArray(value)) {
+            for (var i = 0; i < value.length; i++) traverse(value[i], seen);
+        } else {
+            for (var key in value) traverse(value[key], seen);
+        }
+        return value;
+    }
+
+    // Built-in: Teleport Component
+    var teleportId = 0;
+    var Teleport = {
+        name: 'Teleport',
+        props: ['to', 'disabled'],
+        setup: function (props, ctx) {
+            // FIX: Robustly resolve instance and props
+            // 'props' argument might be incorrect (definitions array) if setupComponent logic is stale/broken.
+            // We use currentInstance.vnode.props as the source of truth if needed.
+            var instance = currentInstance;
+            var vnode = instance.vnode;
+
+            // 1. Ensure slots are init (fix for setupComponent missing updateSlots)
+            if (!instance.slots || !instance.slots.default) {
+                // If updateSlots is available globally (hoisted), assume it works
+                // Fallback: simple lambda
+                instance.slots = instance.slots || {};
+                if (vnode.children && Array.isArray(vnode.children)) {
+                    instance.slots.default = function () { return vnode.children };
+                }
+            }
+
+            // 2. Resolve Props
+            // If props is array (definition) or empty, try vnode.props
+            var actualProps = props;
+            if (Array.isArray(props) || !props.to) {
+                actualProps = vnode.props || {};
+            }
+
+            // console.log('[Teleport] setup', { id: instance.uid, propsArg: props, actual: actualProps });
+
+            var targetEl = null;
+            var containerId = 'teleport-' + (teleportId++);
+
+            onMounted(function () {
+                // Use captured actualProps
+                if (actualProps.disabled) return;
+
+                var to = actualProps.to;
+                targetEl = typeof to === 'string'
+                    ? document.querySelector(to)
+                    : to;
+
+                if (!targetEl) {
+                    // console.warn('[Teleport] target not found:', to);
+                    return;
+                }
+
+                // Find our container by ID and move its children
+                nextTick(function () {
+                    var container = document.getElementById(containerId);
+                    if (container && container.children.length > 0) {
+                        // Move all children to target
+                        // We use append here. Ideally we should track and remove old ones on update.
+                        // But for Modal it's usually 1-to-1.
+                        while (container.firstChild) {
+                            targetEl.appendChild(container.firstChild);
+                        }
+                    }
+                });
+            });
+
+            onUpdated(function () {
+                // For updates, we might need re-resolved props if we support dynamic 'to'.
+                // But setup runs once. We rely on closure actualProps for 'to'.
+                // If 'disabled' changes, we need reactivity.
+                // Assuming props ARE reactive or we re-read vnode?
+                // mishkah-vue current limitation: props updates might not trigger setup re-run or be reactive.
+                // But we can re-read vnode.props from instance if available?
+                // instance.vnode reference might be updated by framework?
+                // Let's stick to closure for now.
+
+                if (actualProps.disabled || !targetEl) return;
+
+                nextTick(function () {
+                    var container = document.getElementById(containerId);
+                    if (container) {
+                        // Clear target? Dangerous if multiple teleports.
+                        // But safe for simple modal.
+                        targetEl.innerHTML = '';
+                        while (container.firstChild) {
+                            targetEl.appendChild(container.firstChild);
+                        }
+                    }
+                });
+            });
+
+            onUnmounted(function () {
+                if (targetEl) {
+                    targetEl.innerHTML = '';
+                }
+            });
+
+            return function () {
+                // Use instance.slots for latest
+                var children = instance.slots.default ? instance.slots.default() : [];
+
+                if (actualProps.disabled) {
+                    return h('div', { style: 'display:contents' }, children);
+                }
+
+                // Return a hidden div with unique ID
+                return h('div', {
+                    id: containerId,
+                    style: 'display:none'
+                }, children);
+            };
+        }
+    };
+
     return {
+
         createApp: createApp,
         h: h,
         ref: ref,
@@ -869,6 +1010,7 @@
         useTheme: useTheme,
         initMishkah: initMishkah,
         html: html,
-        version: '3.3.0-standalone'
+        Teleport: Teleport,
+        version: '3.4.0-standalone'
     }
 })
