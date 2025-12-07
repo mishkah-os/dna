@@ -327,9 +327,15 @@ function startApp() {
                         previewSrc: generatePreview(state.activeFramework, historyItem.code)
                     }));
 
+                    window._ignoringCodeMirrorChange = true;
+
                     if (M.UI.CodeMirror.setValue) {
                         M.UI.CodeMirror.setValue('editor', historyItem.code);
                     }
+
+                    setTimeout(() => {
+                        window._ignoringCodeMirrorChange = false;
+                    }, 100);
                 }
             }
         },
@@ -371,7 +377,7 @@ function startApp() {
         'app.init': {
             on: ['init'],
             handler: async (e, ctx) => {
-                console.log('🔍 [app.init] Starting...');
+                console.log('🔍 [app.init] Starting 1111111111111...');
 
                 // Check if EXAMPLES is loaded
                 console.log('🔍 [app.init] EXAMPLES:', window.EXAMPLES);
@@ -411,11 +417,22 @@ function startApp() {
                     previewSrc: generatePreview(state.activeFramework, code)
                 }));
 
-                // Force CodeMirror update
+                // Force CodeMirror update بدون إطلاق onChange
+                window._ignoringCodeMirrorChange = true;
+                console.log('🔧 [app.init] Forcing CodeMirror update...');
+                console.log('🔧 [app.init] Code:', code.length);
                 setTimeout(() => {
                     if (M.UI.CodeMirror.setValue) {
                         M.UI.CodeMirror.setValue('editor', code);
                     }
+
+                    // Force refresh to fix layout
+                    setTimeout(() => {
+                        if (M.UI.CodeMirror.refresh) {
+                            M.UI.CodeMirror.refresh('editor');
+                        }
+                        window._ignoringCodeMirrorChange = false;
+                    }, 100);
                 }, 50);
 
                 console.log('✅ [app.init] Completed!');
@@ -425,14 +442,21 @@ function startApp() {
         'code.change': {
             // Triggered by CodeMirror onChange
             handler: (newCode, ctx) => {
-                const state = ctx.getState();
-
-                // STRICT CHECK: Reject if it's an event object or not a string
-                if (typeof newCode === 'object') {
-                    console.warn('[code.change] Ignored event object:', newCode);
+                // تجاهل التغييرات أثناء التبديل بين الـ frameworks
+                if (window._ignoringCodeMirrorChange) {
+                    console.log('[code.change] Ignoring change during framework switch');
                     return;
                 }
 
+                const state = ctx.getState();
+
+                // تجاهل DOM events بشكل صامت - handler مش مفروض يتستدعى من DOM
+                if (typeof newCode === 'object' && newCode && newCode.type) {
+                    // This is a DOM event, ignore silently
+                    return;
+                }
+
+                // STRICT CHECK: Reject if not a string
                 if (typeof newCode !== 'string') {
                     console.warn('[code.change] Ignored non-string value:', typeof newCode);
                     return;
@@ -472,10 +496,16 @@ function startApp() {
                     previewSrc: generatePreview(state.activeFramework, code)
                 }));
 
-                // Force CodeMirror update
+                // Force CodeMirror update بدون إطلاق onChange
+                window._ignoringCodeMirrorChange = true;
+
                 if (M.UI.CodeMirror.setValue) {
                     M.UI.CodeMirror.setValue('editor', code);
                 }
+
+                setTimeout(() => {
+                    window._ignoringCodeMirrorChange = false;
+                }, 100);
             }
         },
 
@@ -590,9 +620,15 @@ function startApp() {
                     previewSrc: generatePreview(s.activeFramework, newExample.code[s.activeFramework])
                 }));
 
+                window._ignoringCodeMirrorChange = true;
+
                 if (M.UI.CodeMirror.setValue) {
                     M.UI.CodeMirror.setValue('editor', newExample.code[state.activeFramework]);
                 }
+
+                setTimeout(() => {
+                    window._ignoringCodeMirrorChange = false;
+                }, 100);
             }
         },
 
@@ -678,9 +714,17 @@ function startApp() {
                     showReadme: false
                 }));
 
+                // تفعيل flag لمنع onChange أثناء التحديث
+                window._ignoringCodeMirrorChange = true;
+
                 if (M.UI.CodeMirror.setValue) {
                     M.UI.CodeMirror.setValue('editor', code);
                 }
+
+                // إلغاء flag بعد 100ms
+                setTimeout(() => {
+                    window._ignoringCodeMirrorChange = false;
+                }, 100);
             }
         },
 
@@ -704,21 +748,32 @@ function startApp() {
                     previewSrc: generatePreview(framework, code)
                 }));
 
-                // Update CodeMirror
+
+                // Update CodeMirror بدون إطلاق onChange
                 setTimeout(() => {
-                    // Reset last value tracking to allow onChange for new framework
-                    window._lastCodeMirrorValue = '';
+                    // تفعيل flag لتجاهل onChange
+                    window._ignoringCodeMirrorChange = true;
+                    window._lastCodeMirrorValue = ''; // Reset tracking
 
                     if (M.UI.CodeMirror.setValue) {
                         // Ensure code is a string
                         const safeCode = typeof code === 'string' ? code : '';
                         M.UI.CodeMirror.setValue('editor', safeCode);
-                        // We might need to update mode too, but M.UI.CodeMirror handles it if we re-render or use instance
+
+                        // Update mode
                         const instance = M.UI.CodeMirror.getInstance('editor');
                         if (instance) {
                             instance.setOption('mode', lang === 'html' ? 'htmlmixed' : lang);
                         }
                     }
+
+                    // إلغاء flag بعد 100ms للسماح بالـ onChange الطبيعي
+                    setTimeout(() => {
+                        if (M.UI.CodeMirror.refresh) {
+                            M.UI.CodeMirror.refresh('editor');
+                        }
+                        window._ignoringCodeMirrorChange = false;
+                    }, 100);
                 }, 50);
             }
         },
@@ -989,7 +1044,7 @@ function startApp() {
         // We use M.UI.CodeMirror with onChange handler
         return D.Containers.Div({
             attrs: {
-                class: 'flex-1 overflow-auto',
+                class: 'flex-1 overflow-hidden',
                 style: 'height: calc(100vh - 3.5rem);'
             }
         }, [
@@ -999,7 +1054,6 @@ function startApp() {
                 lang: FRAMEWORKS[db.activeFramework]?.lang || 'html',
                 theme: 'dracula',
                 height: '100%',
-                style: 'height: -webkit-fill-available;',
                 onChange: (val) => {
                     // Get value from editor instance if val is undefined
                     if (typeof val !== 'string') {
