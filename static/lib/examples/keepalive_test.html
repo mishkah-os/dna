@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Mishkah Vue - KeepAlive Test</title>
-    <script src="../mishkah.core.js?v=ka2"></script>
-    <script src="../mishkah-vue.js?v=ka2"></script>
-    <script src="../mishkah-vue-jsx.js?v=ka2"></script>
+    <script src="../mishkah.core.js?v=ka8"></script>
+    <script src="../mishkah-vue.js?v=ka8"></script>
+    <script src="../mishkah-vue-jsx.js?v=ka8"></script>
     <style>
         body {
             font-family: sans-serif;
@@ -50,8 +50,9 @@
     <div id="app"></div>
 
     <script type="text/babel">
-        const { createApp, ref, h, KeepAlive } = MishkahVue;
+        const { createApp, ref, h } = MishkahVue;
 
+        // Simple Counter Component
         const CounterComp = {
             name: 'CounterComp',
             setup() {
@@ -61,12 +62,12 @@
                         <h3>🔢 Counter Component</h3>
                         <p>Count: {count.value}</p>
                         <button onClick={() => count.value++}>Increment</button>
-                        <p><i>If KeepAlive works, this count should persist when you switch tabs!</i></p>
                     </div>
                 );
             }
         };
 
+        // Simple Form Component
         const FormComp = {
             name: 'FormComp',
             setup() {
@@ -76,12 +77,12 @@
                         <h3>📝 Form Component</h3>
                         <input value={text.value} onInput={(e) => text.value = e.target.value} />
                         <p>You typed: {text.value}</p>
-                        <p><i>This text should also persist.</i></p>
                     </div>
                 );
             }
         };
 
+        // Main App (WITHOUT KeepAlive - Simplified Test)
         const App = {
             setup() {
                 const currentTab = ref('Counter');
@@ -92,15 +93,13 @@
 
                 return () => (
                     <div>
-                        <h1>KeepAlive Test</h1>
+                        <h1>KeepAlive Test (Simplified)</h1>
                         <div>
                             <button class={currentTab.value === 'Counter' ? 'tab-btn active' : 'tab-btn'} onClick={() => toggle('Counter')}>Counter</button>
                             <button class={currentTab.value === 'Form' ? 'tab-btn active' : 'tab-btn'} onClick={() => toggle('Form')}>Form</button>
                         </div>
 
-                        <KeepAlive>
-                            {currentTab.value === 'Counter' ? <CounterComp key="A" /> : <FormComp key="B" />}
-                        </KeepAlive>
+                        {currentTab.value === 'Counter' ? <CounterComp /> : <FormComp />}
                     </div>
                 );
             }

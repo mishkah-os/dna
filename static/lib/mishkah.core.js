@@ -755,767 +755,756 @@
           }
         }
       }
-    }
-  }
 
       if (prev == null) { return host.appendChild(render(next, db, parentPath)); }
-  if (next == null) {
-    if (dom && dom.parentNode === host) {
-      try {
-        console.log('[CORE:VDOM] Removing child:', dom, 'from', host);
-        host.removeChild(dom);
+      if (next == null) {
+        if (dom && dom.parentNode === host) {
+          try { host.removeChild(dom); }
+          catch (err) { reportCoreError('CORE:DOM', 'Failed to remove child during patch', { hostTag: host && host.tagName }, err); }
+        } return;
       }
-      catch (err) { reportCoreError('CORE:DOM', 'Failed to remove child during patch', { hostTag: host && host.tagName }, err); }
-    } else {
-      console.log('[CORE:VDOM] Skipping removal - dom or parent mismatch', dom, host);
-    }
-    return;
-  }
-  if (!same(next, prev)) {
-    // Special handling: preserve canvas/iframe elements to avoid destroying Chart.js/external instances
-    // Only replace if tag actually changed, otherwise update props and patch children
-    var preserveTags = { 'canvas': 1, 'iframe': 1, 'video': 1, 'audio': 1 };
-    if (next.tag && prev.tag && next.tag === prev.tag && preserveTags[next.tag]) {
-      // Tag is the same and should be preserved - treat as same element
+      if (!same(next, prev)) {
+        // Special handling: preserve canvas/iframe elements to avoid destroying Chart.js/external instances
+        // Only replace if tag actually changed, otherwise update props and patch children
+        var preserveTags = { 'canvas': 1, 'iframe': 1, 'video': 1, 'audio': 1 };
+        if (next.tag && prev.tag && next.tag === prev.tag && preserveTags[next.tag]) {
+          // Tag is the same and should be preserved - treat as same element
+          next._dom = dom;
+          next._path = prev._path || (parentPath + '/' + next.tag + (next.key ? ('#' + next.key) : ''));
+          updateProps(dom, next.props || {}, prev.props || {}, db);
+          trackVNodeDom(next);
+          patchChildren(dom, next.children || [], prev.children || [], db, opts, next._path);
+          return;
+        }
+        // Tag changed or not preservable - do full replace
+        var repl = render(next, db, parentPath);
+        try { host.replaceChild(repl, dom); }
+        catch (err) { reportCoreError('CORE:DOM', 'Failed to replace child during patch', { hostTag: host && host.tagName }, err); host.appendChild(repl); }
+        return;
+      }
+      if (next._type === 'text') {
+        if (dom && dom.nodeType === 3) {
+          var nv = (next.props && next.props.nodeValue != null) ? next.props.nodeValue : "";
+          var pv = (prev.props && prev.props.nodeValue != null) ? prev.props.nodeValue : "";
+          if (nv !== pv) dom.nodeValue = nv; next._dom = dom; trackVNodeDom(next);
+        } else {
+          var n = global.document.createTextNode(String(next.props && next.props.nodeValue != null ? next.props.nodeValue : ""));
+          next._dom = n; if (dom) {
+            try { host.replaceChild(n, dom); }
+            catch (err) { reportCoreError('CORE:DOM', 'Failed to replace vnode DOM node', { hostTag: host && host.tagName }, err); host.appendChild(n); }
+          } else host.appendChild(n);
+          trackVNodeDom(next);
+        }
+        return;
+      }
       next._dom = dom;
       next._path = prev._path || (parentPath + '/' + next.tag + (next.key ? ('#' + next.key) : ''));
       updateProps(dom, next.props || {}, prev.props || {}, db);
       trackVNodeDom(next);
       patchChildren(dom, next.children || [], prev.children || [], db, opts, next._path);
-      return;
     }
-    // Tag changed or not preservable - do full replace
-    var repl = render(next, db, parentPath);
-    try {
-      console.log('[CORE:VDOM] Replacing child:', dom, 'with:', repl);
-      host.replaceChild(repl, dom);
-    }
-    catch (err) { reportCoreError('CORE:DOM', 'Failed to replace child during patch', { hostTag: host && host.tagName }, err); host.appendChild(repl); }
-    return;
-  }
-  if (next._type === 'text') {
-    if (dom && dom.nodeType === 3) {
-      var nv = (next.props && next.props.nodeValue != null) ? next.props.nodeValue : "";
-      var pv = (prev.props && prev.props.nodeValue != null) ? prev.props.nodeValue : "";
-      if (nv !== pv) dom.nodeValue = nv; next._dom = dom; trackVNodeDom(next);
-    } else {
-      var n = global.document.createTextNode(String(next.props && next.props.nodeValue != null ? next.props.nodeValue : ""));
-      next._dom = n; if (dom) {
-        try { host.replaceChild(n, dom); }
-        catch (err) { reportCoreError('CORE:DOM', 'Failed to replace vnode DOM node', { hostTag: host && host.tagName }, err); host.appendChild(n); }
-      } else host.appendChild(n);
-      trackVNodeDom(next);
-    }
-    return;
-  }
-  next._dom = dom;
-  next._path = prev._path || (parentPath + '/' + next.tag + (next.key ? ('#' + next.key) : ''));
-  updateProps(dom, next.props || {}, prev.props || {}, db);
-  trackVNodeDom(next);
-  patchChildren(dom, next.children || [], prev.children || [], db, opts, next._path);
-}
 
     function patchChildren(parent, nextList, prevList, db, opts, parentPath) {
-    var i, len, hasKeys = false;
-    for (i = 0; i < nextList.length && !hasKeys; i++) if (isKeyed(nextList[i])) hasKeys = true;
-    for (i = 0; i < prevList.length && !hasKeys; i++) if (isKeyed(prevList[i])) hasKeys = true;
+      var i, len, hasKeys = false;
+      for (i = 0; i < nextList.length && !hasKeys; i++) if (isKeyed(nextList[i])) hasKeys = true;
+      for (i = 0; i < prevList.length && !hasKeys; i++) if (isKeyed(prevList[i])) hasKeys = true;
 
-    if (!hasKeys) {
-      len = Math.max(nextList.length, prevList.length);
-      for (i = 0; i < len; i++) patch(parent, nextList[i], prevList[i], db, opts, parentPath);
-      return;
-    }
+      if (!hasKeys) {
+        len = Math.max(nextList.length, prevList.length);
+        for (i = 0; i < len; i++) patch(parent, nextList[i], prevList[i], db, opts, parentPath);
+        return;
+      }
 
-    var oldKeyIndex = new Map();
-    for (i = 0; i < prevList.length; i++) { var v = prevList[i]; if (v && v.key != null) oldKeyIndex.set(v.key, i); }
+      var oldKeyIndex = new Map();
+      for (i = 0; i < prevList.length; i++) { var v = prevList[i]; if (v && v.key != null) oldKeyIndex.set(v.key, i); }
 
-    var newIndexToOld = new Array(nextList.length);
-    for (i = 0; i < nextList.length; i++) newIndexToOld[i] = -1;
-    for (i = 0; i < nextList.length; i++) { var n = nextList[i]; if (!n) continue; if (n.key != null && oldKeyIndex.has(n.key)) newIndexToOld[i] = oldKeyIndex.get(n.key); }
+      var newIndexToOld = new Array(nextList.length);
+      for (i = 0; i < nextList.length; i++) newIndexToOld[i] = -1;
+      for (i = 0; i < nextList.length; i++) { var n = nextList[i]; if (!n) continue; if (n.key != null && oldKeyIndex.has(n.key)) newIndexToOld[i] = oldKeyIndex.get(n.key); }
 
-    for (i = 0; i < nextList.length; i++) { var oldIdx = newIndexToOld[i]; if (oldIdx >= 0) patch(parent, nextList[i], prevList[oldIdx], db, opts, parentPath); else patch(parent, nextList[i], null, db, opts, parentPath); }
+      for (i = 0; i < nextList.length; i++) { var oldIdx = newIndexToOld[i]; if (oldIdx >= 0) patch(parent, nextList[i], prevList[oldIdx], db, opts, parentPath); else patch(parent, nextList[i], null, db, opts, parentPath); }
 
-    var used = new Set(); for (i = 0; i < newIndexToOld.length; i++) if (newIndexToOld[i] >= 0) used.add(newIndexToOld[i]);
-    for (i = 0; i < prevList.length; i++) {
-      if (used.has(i)) continue;
-      var pv = prevList[i];
-      var el = pv && pv._dom;
-      if (el && el.parentNode === parent) {
-        try { parent.removeChild(el); }
-        catch (err) { reportCoreError('CORE:DOM', 'Failed to remove stale child', { parentTag: parent && parent.tagName }, err); }
+      var used = new Set(); for (i = 0; i < newIndexToOld.length; i++) if (newIndexToOld[i] >= 0) used.add(newIndexToOld[i]);
+      for (i = 0; i < prevList.length; i++) {
+        if (used.has(i)) continue;
+        var pv = prevList[i];
+        var el = pv && pv._dom;
+        if (el && el.parentNode === parent) {
+          try { parent.removeChild(el); }
+          catch (err) { reportCoreError('CORE:DOM', 'Failed to remove stale child', { parentTag: parent && parent.tagName }, err); }
+        }
+      }
+
+      function lis(arr) {
+        var n = arr.length, p = new Array(n), result = [], u, v, c, m;
+        for (var i2 = 0; i2 < n; i2++) {
+          c = arr[i2]; if (c < 0) continue;
+          u = 0; v = result.length - 1;
+          while (u <= v) { m = (u + v) >> 1; if (arr[result[m]] < c) u = m + 1; else v = m - 1; }
+          if (u >= result.length) result.push(i2); else result[u] = i2;
+          p[i2] = u > 0 ? result[u - 1] : -1;
+        }
+        u = result.length; v = result[result.length - 1]; var seq = new Array(u);
+        while (u-- > 0) { seq[u] = v; v = p[v]; }
+        return seq;
+      }
+
+      var seq = lis(newIndexToOld), j = seq.length - 1;
+      for (i = nextList.length - 1; i >= 0; i--) {
+        var nextSiblingVNode = (i + 1 < nextList.length) ? nextList[i + 1] : null;
+        var ref = nextSiblingVNode && nextSiblingVNode._dom ? nextSiblingVNode._dom : null;
+        if (ref && ref.parentNode !== parent) ref = null;
+        var el2 = nextList[i] && nextList[i]._dom;
+        if (newIndexToOld[i] === -1) { if (el2 && el2 !== ref) parent.insertBefore(el2, ref); }
+        else { if (j < 0 || i !== seq[j]) { if (el2 && el2 !== ref) parent.insertBefore(el2, ref); } else { j--; } }
       }
     }
-
-    function lis(arr) {
-      var n = arr.length, p = new Array(n), result = [], u, v, c, m;
-      for (var i2 = 0; i2 < n; i2++) {
-        c = arr[i2]; if (c < 0) continue;
-        u = 0; v = result.length - 1;
-        while (u <= v) { m = (u + v) >> 1; if (arr[result[m]] < c) u = m + 1; else v = m - 1; }
-        if (u >= result.length) result.push(i2); else result[u] = i2;
-        p[i2] = u > 0 ? result[u - 1] : -1;
-      }
-      u = result.length; v = result[result.length - 1]; var seq = new Array(u);
-      while (u-- > 0) { seq[u] = v; v = p[v]; }
-      return seq;
-    }
-
-    var seq = lis(newIndexToOld), j = seq.length - 1;
-    for (i = nextList.length - 1; i >= 0; i--) {
-      var nextSiblingVNode = (i + 1 < nextList.length) ? nextList[i + 1] : null;
-      var ref = nextSiblingVNode && nextSiblingVNode._dom ? nextSiblingVNode._dom : null;
-      if (ref && ref.parentNode !== parent) ref = null;
-      var el2 = nextList[i] && nextList[i]._dom;
-      if (newIndexToOld[i] === -1) { if (el2 && el2 !== ref) parent.insertBefore(el2, ref); }
-      else { if (j < 0 || i !== seq[j]) { if (el2 && el2 !== ref) parent.insertBefore(el2, ref); } else { j--; } }
-    }
-  }
 
     return {
-  h: h,
-  render: render,
-  patch: patch,
-  lookupVNode: function (el) { return domToVNode && el ? domToVNode.get(el) : null; }
-};
-  }) ();
+      h: h,
+      render: render,
+      patch: patch,
+      lookupVNode: function (el) { return domToVNode && el ? domToVNode.get(el) : null; }
+    };
+  })();
 
-if (M.Devtools && typeof M.Devtools.lookupVNode !== 'function') {
-  M.Devtools.lookupVNode = function (el) { return VDOM.lookupVNode(el); };
-}
-
-// -------------------------------------------------------------------
-// Event delegation (pure core) — يستدعي Guardian/RuleCenter/Auditor إن وُجدوا
-// -------------------------------------------------------------------
-function matchesList(expected, candidates) {
-  var exp = toArr(expected); if (exp.length === 0) return true;
-  if (!candidates || !candidates.length) return false;
-  for (var i = 0; i < exp.length; i++) {
-    var pat = exp[i]; if (pat == null) continue;
-    if (pat === '*') return true;
-    if (pat instanceof RegExp) { for (var j = 0; j < candidates.length; j++) if (pat.test(candidates[j])) return true; continue; }
-    if (typeof pat === 'string') {
-      if (pat.length && pat.charAt(pat.length - 1) === '*') { var prefix = pat.slice(0, -1); for (var k = 0; k < candidates.length; k++) if (String(candidates[k]).indexOf(prefix) === 0) return true; continue; }
-      if (pat.length && pat.charAt(0) === '*') { var suffix = pat.slice(1); for (var k2 = 0; k2 < candidates.length; k2++) { var c = String(candidates[k2]); if (c.length >= suffix.length && c.lastIndexOf(suffix) === c.length - suffix.length) return true; } continue; }
-      for (var k3 = 0; k3 < candidates.length; k3++) if (candidates[k3] === pat) return true;
-    }
+  if (M.Devtools && typeof M.Devtools.lookupVNode !== 'function') {
+    M.Devtools.lookupVNode = function (el) { return VDOM.lookupVNode(el); };
   }
-  return false;
-}
 
-function computePathsFrom(target, root) {
-  var keysPath = [], gkeysPath = [];
-  var node = (target && target.nodeType === 1) ? target : null;
-  var fenceNode = null;
-  var scopeId = null;
-  var limit = null;
-  if (root) {
-    if (root.nodeType === 1) limit = root;
-    else if (root.nodeType === 9 && root.documentElement) limit = root.documentElement;
-  }
-  while (node && node.nodeType === 1) {
-    if (node.hasAttribute('data-m-key')) {
-      var raw = node.getAttribute('data-m-key') || '';
-      var parts = raw.split(/[\s,]+/);
-      for (var i = 0; i < parts.length; i++) {
-        var k = parts[i];
-        if (!k) continue;
-        if (keysPath.indexOf(k) === -1) keysPath.push(k);
-        if (!scopeId && k.indexOf('tpl:') === 0) scopeId = k;
+  // -------------------------------------------------------------------
+  // Event delegation (pure core) — يستدعي Guardian/RuleCenter/Auditor إن وُجدوا
+  // -------------------------------------------------------------------
+  function matchesList(expected, candidates) {
+    var exp = toArr(expected); if (exp.length === 0) return true;
+    if (!candidates || !candidates.length) return false;
+    for (var i = 0; i < exp.length; i++) {
+      var pat = exp[i]; if (pat == null) continue;
+      if (pat === '*') return true;
+      if (pat instanceof RegExp) { for (var j = 0; j < candidates.length; j++) if (pat.test(candidates[j])) return true; continue; }
+      if (typeof pat === 'string') {
+        if (pat.length && pat.charAt(pat.length - 1) === '*') { var prefix = pat.slice(0, -1); for (var k = 0; k < candidates.length; k++) if (String(candidates[k]).indexOf(prefix) === 0) return true; continue; }
+        if (pat.length && pat.charAt(0) === '*') { var suffix = pat.slice(1); for (var k2 = 0; k2 < candidates.length; k2++) { var c = String(candidates[k2]); if (c.length >= suffix.length && c.lastIndexOf(suffix) === c.length - suffix.length) return true; } continue; }
+        for (var k3 = 0; k3 < candidates.length; k3++) if (candidates[k3] === pat) return true;
       }
     }
-    if (node.hasAttribute('data-m-gkey')) {
-      var raw2 = node.getAttribute('data-m-gkey') || '';
-      var parts2 = raw2.split(/[\s,]+/);
-      for (var j = 0; j < parts2.length; j++) {
-        var g = parts2[j];
-        if (!g) continue;
-        if (gkeysPath.indexOf(g) === -1) gkeysPath.push(g);
-      }
-    }
-    if (node.hasAttribute('data-m-scope')) {
-      if (!fenceNode) fenceNode = node;
-      var scopeAttr = node.getAttribute('data-m-scope') || '';
-      var segments = scopeAttr.trim() ? scopeAttr.trim().split(/[\s,]+/) : [];
-      var soft = false;
-      for (var p = 0; p < segments.length; p++) {
-        if (segments[p] === 'soft') { soft = true; break; }
-      }
-      if (!soft) break;
-    }
-    if (limit && node === limit) break;
-    node = node.parentElement;
+    return false;
   }
-  return { keysPath: keysPath, gkeysPath: gkeysPath, fenceNode: fenceNode, scopeId: scopeId };
-}
 
-function handleEvent(type, e, ctx, orders) {
-  try {
-    var rootEl = (ctx && ctx.root) || global.document || null;
-    var pathInfo = computePathsFrom(e && e.target, rootEl);
-    var keysPath = pathInfo.keysPath;
-    var gkeysPath = pathInfo.gkeysPath;
-
-    // preflight (event)
-    try { M.Guardian.runPreflight('event', { type: type, event: e, keysPath: keysPath, gkeysPath: gkeysPath }, ctx); }
-    catch (prefErr) { M.Auditor.error('E-PREFLIGHT', 'event blocked', { error: String(prefErr), type: type }); return; }
-
-    var matched = 0;
-    var halted = false;
-    var baseCtx = ctx || {};
-    var scopeBase = pathInfo.fenceNode || rootEl || (global.document || null);
-
-    function createScopedContext() {
-      var derived = Object.create(baseCtx);
-      derived.scopeNode = pathInfo.fenceNode || null;
-      derived.scopeId = pathInfo.scopeId || null;
-      derived.scopeQuery = function (sel) {
-        if (!sel) return null;
-        var base = scopeBase;
-        if (!base && global && global.document) base = global.document;
-        return base && typeof base.querySelector === 'function' ? base.querySelector(sel) : null;
-      };
-      derived.scopeQueryAll = function (sel) {
-        if (!sel) return [];
-        var base = scopeBase;
-        if (!base && global && global.document) base = global.document;
-        if (!base || typeof base.querySelectorAll !== 'function') return [];
-        return base.querySelectorAll(sel);
-      };
-      derived.stop = function () { halted = true; };
-      return derived;
+  function computePathsFrom(target, root) {
+    var keysPath = [], gkeysPath = [];
+    var node = (target && target.nodeType === 1) ? target : null;
+    var fenceNode = null;
+    var scopeId = null;
+    var limit = null;
+    if (root) {
+      if (root.nodeType === 1) limit = root;
+      else if (root.nodeType === 9 && root.documentElement) limit = root.documentElement;
     }
-
-    for (var x = 0; x < orders.length; x++) {
-      var o = orders[x];
-      if (!o || o.disabled) continue;
-      var onOk = (!o.on || o.on.length === 0) ? true : (o.on.indexOf(type) !== -1);
-      if (!onOk) continue;
-      var keyOk = matchesList(o.keys, keysPath);
-      var gOk = matchesList(o.gkeys, gkeysPath);
-      if (keyOk && gOk) {
-        matched++;
-        try {
-          var end = (M.Auditor && M.Auditor.timing && M.Auditor.timing.start) ? M.Auditor.timing.start('event:' + (o.name || type), { type: type, order: o.name, keysPath: keysPath }) : function () { return 0; };
-          var scopedCtx = createScopedContext();
-          o.handler(e, scopedCtx);
-          var ms = end(true);
-          if (M.Auditor && M.Auditor.timing && M.Auditor.timing.record) M.Auditor.timing.record('event', (o.name || type), ms, { keysPath: keysPath, gkeysPath: gkeysPath });
-        } catch (err) {
-          M.Auditor.warn('E-HANDLER', 'handler threw for order: ' + (o.name || 'order'), { error: String(err && err.message || err) });
+    while (node && node.nodeType === 1) {
+      if (node.hasAttribute('data-m-key')) {
+        var raw = node.getAttribute('data-m-key') || '';
+        var parts = raw.split(/[\s,]+/);
+        for (var i = 0; i < parts.length; i++) {
+          var k = parts[i];
+          if (!k) continue;
+          if (keysPath.indexOf(k) === -1) keysPath.push(k);
+          if (!scopeId && k.indexOf('tpl:') === 0) scopeId = k;
         }
-        if (halted) break;
       }
+      if (node.hasAttribute('data-m-gkey')) {
+        var raw2 = node.getAttribute('data-m-gkey') || '';
+        var parts2 = raw2.split(/[\s,]+/);
+        for (var j = 0; j < parts2.length; j++) {
+          var g = parts2[j];
+          if (!g) continue;
+          if (gkeysPath.indexOf(g) === -1) gkeysPath.push(g);
+        }
+      }
+      if (node.hasAttribute('data-m-scope')) {
+        if (!fenceNode) fenceNode = node;
+        var scopeAttr = node.getAttribute('data-m-scope') || '';
+        var segments = scopeAttr.trim() ? scopeAttr.trim().split(/[\s,]+/) : [];
+        var soft = false;
+        for (var p = 0; p < segments.length; p++) {
+          if (segments[p] === 'soft') { soft = true; break; }
+        }
+        if (!soft) break;
+      }
+      if (limit && node === limit) break;
+      node = node.parentElement;
     }
-    if (matched === 0) { M.Auditor.debug('I-NOMATCH', 'no order matched: ' + type, { keysPath: keysPath, gkeysPath: gkeysPath }); }
-  } catch (err2) {
-    M.Auditor.error('E-HANDLE', 'handleEvent failed', { error: String(err2 && err2.message || err2) });
-  }
-}
-
-function setupDelegation(rootEl, ctx, orders, options) {
-  var DEFAULT_EVENTS = [
-    "click", "dblclick", "contextmenu",
-    "input", "change", "submit", "reset",
-    "keydown", "keypress", "keyup",
-    "pointerdown", "pointerup", "pointermove", "pointercancel", "pointerover", "pointerout", "pointerenter", "pointerleave",
-    "mousedown", "mouseup", "mousemove", "mouseenter", "mouseleave", "mouseover", "mouseout",
-    "touchstart", "touchend", "touchmove", "touchcancel",
-    "focus", "blur", "wheel", "scroll"
-  ];
-  var NON_BUBBLE_DEFAULT = new Set(["focus", "blur", "mouseenter", "mouseleave", "pointerenter", "pointerleave"]);
-  var CAPTURE_PREF_DEFAULT = new Set(["focus", "blur", "scroll", "mouseenter", "mouseleave", "pointerenter", "pointerleave"]);
-
-  function defaultEventsFromOrders(orArr) {
-    var s = {}; s.click = 1; s.input = 1; s.change = 1; s.keydown = 1; s.keyup = 1; s.submit = 1;
-    for (var i = 0; i < orArr.length; i++) { var o = orArr[i], evs = toArr(o.on); for (var j = 0; j < evs.length; j++) if (evs[j]) s[String(evs[j]).toLowerCase()] = 1; }
-    return Object.keys(s);
-  }
-
-  var evs = (options && isArr(options.events) && options.events.length) ? options.events : defaultEventsFromOrders(orders);
-  if (!evs.length) evs = DEFAULT_EVENTS.slice();
-
-  var NB = (options && options.nonBubble instanceof Set) ? options.nonBubble : NON_BUBBLE_DEFAULT;
-  var CP = (options && options.capturePref instanceof Set) ? options.capturePref : CAPTURE_PREF_DEFAULT;
-  var passiveDefault = options && typeof options.passive === 'boolean' ? options.passive : false;
-  var r = rootEl || (ctx && ctx.root) || global.document;
-
-  var bound = new Map();
-  function bind(type) {
-    var useCapture = NB.has(type) || CP.has(type);
-    var handler = function (e) { handleEvent(type, e, ctx, orders); };
-    var passive = passiveDefault;
-    if (passiveDefault === true) {
-      passive = true;
-    } else if (passiveDefault === false) {
-      passive = false;
-    }
-    r.addEventListener(type, handler, { capture: useCapture, passive: passive });
-    bound.set(type, { handler: handler, useCapture: useCapture });
-  }
-  for (var i = 0; i < evs.length; i++) bind(evs[i]);
-
-  return {
-    teardown: function () {
-      bound.forEach(function (v, type) { r.removeEventListener(type, v.handler, { capture: v.useCapture }); });
-      bound.clear();
-    }
-  };
-}
-
-// -------------------------------------------------------------------
-// App Core
-// -------------------------------------------------------------------
-var App = (function () {
-  var _bodyFn = null, _database = {}, _ordersObj = {}, _ordersArr = [];
-  var _vApp = null, _$root = null, _ctx = null, _delegation = null;
-  var APP_REGISTRY = global.__MISHKAH_APP_REGISTRY__ = global.__MISHKAH_APP_REGISTRY__ || [];
-  var APP_COUNTER = global.__MISHKAH_APP_COUNTER__ || 0;
-
-  function nextAppId() {
-    APP_COUNTER = (typeof APP_COUNTER === 'number' ? APP_COUNTER : 0) + 1;
-    global.__MISHKAH_APP_COUNTER__ = APP_COUNTER;
-    return 'app#' + APP_COUNTER;
+    return { keysPath: keysPath, gkeysPath: gkeysPath, fenceNode: fenceNode, scopeId: scopeId };
   }
 
-  function registerAppInstance(instance) {
-    if (!instance) return;
-    if (!instance.__appId) instance.__appId = nextAppId();
-    APP_REGISTRY.push(instance);
-    global.__MISHKAH_LAST_APP__ = instance;
-  }
+  function handleEvent(type, e, ctx, orders) {
+    try {
+      var rootEl = (ctx && ctx.root) || global.document || null;
+      var pathInfo = computePathsFrom(e && e.target, rootEl);
+      var keysPath = pathInfo.keysPath;
+      var gkeysPath = pathInfo.gkeysPath;
 
-  function setBody(fn) { _bodyFn = fn; }
+      // preflight (event)
+      try { M.Guardian.runPreflight('event', { type: type, event: e, keysPath: keysPath, gkeysPath: gkeysPath }, ctx); }
+      catch (prefErr) { M.Auditor.error('E-PREFLIGHT', 'event blocked', { error: String(prefErr), type: type }); return; }
 
-  function normalizeOrders(obj) {
-    var arr = [], k, o;
-    for (k in (obj || {})) {
-      o = obj[k] || {};
-      arr.push({
-        name: k,
-        on: toArr(o.on),
-        keys: o.keys == null ? [] : (isArr(o.keys) ? o.keys : [o.keys]),
-        gkeys: o.gkeys == null ? [] : (isArr(o.gkeys) ? o.gkeys : [o.gkeys]),
-        disabled: !!o.disabled,
-        handler: typeof o.handler === 'function' ? o.handler : function () { }
-      });
-    }
-    return arr;
-  }
+      var matched = 0;
+      var halted = false;
+      var baseCtx = ctx || {};
+      var scopeBase = pathInfo.fenceNode || rootEl || (global.document || null);
 
-  function createContext() {
-    var _dirty = false;
-    var _scheduled = false;
-    var _freezeDepth = 0;
-    var _pendingOpts = null;
-    var ctx = null;
-
-    function mergeOpts(base, extra) {
-      if (!base) return extra || null;
-      if (!extra) return base || null;
-      var out = Object.assign({}, base);
-      var add = function (k) {
-        var a = base && base[k];
-        var b = extra && extra[k];
-        var arr = [].concat(a || [], b || []).filter(Boolean);
-        if (arr.length) out[k] = arr;
-      };
-      add('keepScroll');
-      add('except');
-      add('buildonly');
-      return out;
-    }
-
-    function schedule() {
-      if (_scheduled || _freezeDepth > 0 || !_dirty) return;
-      _scheduled = true;
-      var raf = (global && typeof global.requestAnimationFrame === 'function') ? global.requestAnimationFrame : null;
-      var tick = function () {
-        _scheduled = false;
-        if (_dirty && _freezeDepth === 0) flush(null);
-      };
-      if (raf) raf(tick);
-      else if (global && typeof global.setTimeout === 'function') global.setTimeout(tick, 0);
-      else tick();
-    }
-
-    function captureScrollTarget(target) {
-      var doc = global && global.document;
-      if (!doc || !target) return null;
-
-      if (typeof target === 'function') {
-        try { target = target(); } catch (_) { return null; }
-        if (!target) return null;
+      function createScopedContext() {
+        var derived = Object.create(baseCtx);
+        derived.scopeNode = pathInfo.fenceNode || null;
+        derived.scopeId = pathInfo.scopeId || null;
+        derived.scopeQuery = function (sel) {
+          if (!sel) return null;
+          var base = scopeBase;
+          if (!base && global && global.document) base = global.document;
+          return base && typeof base.querySelector === 'function' ? base.querySelector(sel) : null;
+        };
+        derived.scopeQueryAll = function (sel) {
+          if (!sel) return [];
+          var base = scopeBase;
+          if (!base && global && global.document) base = global.document;
+          if (!base || typeof base.querySelectorAll !== 'function') return [];
+          return base.querySelectorAll(sel);
+        };
+        derived.stop = function () { halted = true; };
+        return derived;
       }
 
-      var node = null;
-      var selector = null;
-      var isWindow = false;
-
-      if (target === 'window' || target === global || (global && target === global.window)) {
-        var scrollNode = doc.scrollingElement || doc.documentElement || doc.body;
-        var winTop = (typeof global.scrollY === 'number') ? global.scrollY : (scrollNode ? scrollNode.scrollTop : 0);
-        var winLeft = (typeof global.scrollX === 'number') ? global.scrollX : (scrollNode ? scrollNode.scrollLeft : 0);
-        return { node: scrollNode, selector: null, top: winTop, left: winLeft, isWindow: true };
-      }
-
-      if (typeof Element !== 'undefined' && target instanceof Element) { node = target; }
-      else if (target && target.nodeType === 1) { node = target; }
-      else if (isObj(target)) {
-        if (!node && target.node && typeof Element !== 'undefined' && target.node instanceof Element) { node = target.node; }
-        if (!selector && target.selector != null) { selector = String(target.selector); }
-        if (!node && typeof target.get === 'function') {
+      for (var x = 0; x < orders.length; x++) {
+        var o = orders[x];
+        if (!o || o.disabled) continue;
+        var onOk = (!o.on || o.on.length === 0) ? true : (o.on.indexOf(type) !== -1);
+        if (!onOk) continue;
+        var keyOk = matchesList(o.keys, keysPath);
+        var gOk = matchesList(o.gkeys, gkeysPath);
+        if (keyOk && gOk) {
+          matched++;
           try {
-            var got = target.get();
-            if (typeof Element !== 'undefined' && got instanceof Element) { node = got; }
-            else if (got && got.nodeType === 1) { node = got; }
-            else if (!selector && typeof got === 'string') { selector = got; }
-          } catch (_g) { }
+            var end = (M.Auditor && M.Auditor.timing && M.Auditor.timing.start) ? M.Auditor.timing.start('event:' + (o.name || type), { type: type, order: o.name, keysPath: keysPath }) : function () { return 0; };
+            var scopedCtx = createScopedContext();
+            o.handler(e, scopedCtx);
+            var ms = end(true);
+            if (M.Auditor && M.Auditor.timing && M.Auditor.timing.record) M.Auditor.timing.record('event', (o.name || type), ms, { keysPath: keysPath, gkeysPath: gkeysPath });
+          } catch (err) {
+            M.Auditor.warn('E-HANDLER', 'handler threw for order: ' + (o.name || 'order'), { error: String(err && err.message || err) });
+          }
+          if (halted) break;
         }
       }
+      if (matched === 0) { M.Auditor.debug('I-NOMATCH', 'no order matched: ' + type, { keysPath: keysPath, gkeysPath: gkeysPath }); }
+    } catch (err2) {
+      M.Auditor.error('E-HANDLE', 'handleEvent failed', { error: String(err2 && err2.message || err2) });
+    }
+  }
 
-      if (!node && typeof target === 'string') { selector = selector || String(target); }
+  function setupDelegation(rootEl, ctx, orders, options) {
+    var DEFAULT_EVENTS = [
+      "click", "dblclick", "contextmenu",
+      "input", "change", "submit", "reset",
+      "keydown", "keypress", "keyup",
+      "pointerdown", "pointerup", "pointermove", "pointercancel", "pointerover", "pointerout", "pointerenter", "pointerleave",
+      "mousedown", "mouseup", "mousemove", "mouseenter", "mouseleave", "mouseover", "mouseout",
+      "touchstart", "touchend", "touchmove", "touchcancel",
+      "focus", "blur", "wheel", "scroll"
+    ];
+    var NON_BUBBLE_DEFAULT = new Set(["focus", "blur", "mouseenter", "mouseleave", "pointerenter", "pointerleave"]);
+    var CAPTURE_PREF_DEFAULT = new Set(["focus", "blur", "scroll", "mouseenter", "mouseleave", "pointerenter", "pointerleave"]);
 
-      if (!node && selector) {
-        try { node = doc.querySelector(selector); } catch (_q) { node = null; }
-      } else if (!node && typeof target === 'string') {
-        try { node = doc.querySelector(String(target)); } catch (_s) { node = null; }
+    function defaultEventsFromOrders(orArr) {
+      var s = {}; s.click = 1; s.input = 1; s.change = 1; s.keydown = 1; s.keyup = 1; s.submit = 1;
+      for (var i = 0; i < orArr.length; i++) { var o = orArr[i], evs = toArr(o.on); for (var j = 0; j < evs.length; j++) if (evs[j]) s[String(evs[j]).toLowerCase()] = 1; }
+      return Object.keys(s);
+    }
+
+    var evs = (options && isArr(options.events) && options.events.length) ? options.events : defaultEventsFromOrders(orders);
+    if (!evs.length) evs = DEFAULT_EVENTS.slice();
+
+    var NB = (options && options.nonBubble instanceof Set) ? options.nonBubble : NON_BUBBLE_DEFAULT;
+    var CP = (options && options.capturePref instanceof Set) ? options.capturePref : CAPTURE_PREF_DEFAULT;
+    var passiveDefault = options && typeof options.passive === 'boolean' ? options.passive : false;
+    var r = rootEl || (ctx && ctx.root) || global.document;
+
+    var bound = new Map();
+    function bind(type) {
+      var useCapture = NB.has(type) || CP.has(type);
+      var handler = function (e) { handleEvent(type, e, ctx, orders); };
+      var passive = passiveDefault;
+      if (passiveDefault === true) {
+        passive = true;
+      } else if (passiveDefault === false) {
+        passive = false;
+      }
+      r.addEventListener(type, handler, { capture: useCapture, passive: passive });
+      bound.set(type, { handler: handler, useCapture: useCapture });
+    }
+    for (var i = 0; i < evs.length; i++) bind(evs[i]);
+
+    return {
+      teardown: function () {
+        bound.forEach(function (v, type) { r.removeEventListener(type, v.handler, { capture: v.useCapture }); });
+        bound.clear();
+      }
+    };
+  }
+
+  // -------------------------------------------------------------------
+  // App Core
+  // -------------------------------------------------------------------
+  var App = (function () {
+    var _bodyFn = null, _database = {}, _ordersObj = {}, _ordersArr = [];
+    var _vApp = null, _$root = null, _ctx = null, _delegation = null;
+    var APP_REGISTRY = global.__MISHKAH_APP_REGISTRY__ = global.__MISHKAH_APP_REGISTRY__ || [];
+    var APP_COUNTER = global.__MISHKAH_APP_COUNTER__ || 0;
+
+    function nextAppId() {
+      APP_COUNTER = (typeof APP_COUNTER === 'number' ? APP_COUNTER : 0) + 1;
+      global.__MISHKAH_APP_COUNTER__ = APP_COUNTER;
+      return 'app#' + APP_COUNTER;
+    }
+
+    function registerAppInstance(instance) {
+      if (!instance) return;
+      if (!instance.__appId) instance.__appId = nextAppId();
+      APP_REGISTRY.push(instance);
+      global.__MISHKAH_LAST_APP__ = instance;
+    }
+
+    function setBody(fn) { _bodyFn = fn; }
+
+    function normalizeOrders(obj) {
+      var arr = [], k, o;
+      for (k in (obj || {})) {
+        o = obj[k] || {};
+        arr.push({
+          name: k,
+          on: toArr(o.on),
+          keys: o.keys == null ? [] : (isArr(o.keys) ? o.keys : [o.keys]),
+          gkeys: o.gkeys == null ? [] : (isArr(o.gkeys) ? o.gkeys : [o.gkeys]),
+          disabled: !!o.disabled,
+          handler: typeof o.handler === 'function' ? o.handler : function () { }
+        });
+      }
+      return arr;
+    }
+
+    function createContext() {
+      var _dirty = false;
+      var _scheduled = false;
+      var _freezeDepth = 0;
+      var _pendingOpts = null;
+      var ctx = null;
+
+      function mergeOpts(base, extra) {
+        if (!base) return extra || null;
+        if (!extra) return base || null;
+        var out = Object.assign({}, base);
+        var add = function (k) {
+          var a = base && base[k];
+          var b = extra && extra[k];
+          var arr = [].concat(a || [], b || []).filter(Boolean);
+          if (arr.length) out[k] = arr;
+        };
+        add('keepScroll');
+        add('except');
+        add('buildonly');
+        return out;
       }
 
-      if (!node) return null;
+      function schedule() {
+        if (_scheduled || _freezeDepth > 0 || !_dirty) return;
+        _scheduled = true;
+        var raf = (global && typeof global.requestAnimationFrame === 'function') ? global.requestAnimationFrame : null;
+        var tick = function () {
+          _scheduled = false;
+          if (_dirty && _freezeDepth === 0) flush(null);
+        };
+        if (raf) raf(tick);
+        else if (global && typeof global.setTimeout === 'function') global.setTimeout(tick, 0);
+        else tick();
+      }
 
-      if (!selector && node.getAttribute) {
-        var keyAttr = node.getAttribute('data-m-key');
-        if (keyAttr) {
-          var keyToken = null;
-          var keyParts = String(keyAttr).split(/[\s,]+/);
-          for (var kp = 0; kp < keyParts.length && !keyToken; kp++) if (keyParts[kp]) keyToken = keyParts[kp];
-          if (keyToken) {
-            selector = '[data-m-key~="' + String(keyToken).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
-          } else {
-            selector = '[data-m-key="' + String(keyAttr).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+      function captureScrollTarget(target) {
+        var doc = global && global.document;
+        if (!doc || !target) return null;
+
+        if (typeof target === 'function') {
+          try { target = target(); } catch (_) { return null; }
+          if (!target) return null;
+        }
+
+        var node = null;
+        var selector = null;
+        var isWindow = false;
+
+        if (target === 'window' || target === global || (global && target === global.window)) {
+          var scrollNode = doc.scrollingElement || doc.documentElement || doc.body;
+          var winTop = (typeof global.scrollY === 'number') ? global.scrollY : (scrollNode ? scrollNode.scrollTop : 0);
+          var winLeft = (typeof global.scrollX === 'number') ? global.scrollX : (scrollNode ? scrollNode.scrollLeft : 0);
+          return { node: scrollNode, selector: null, top: winTop, left: winLeft, isWindow: true };
+        }
+
+        if (typeof Element !== 'undefined' && target instanceof Element) { node = target; }
+        else if (target && target.nodeType === 1) { node = target; }
+        else if (isObj(target)) {
+          if (!node && target.node && typeof Element !== 'undefined' && target.node instanceof Element) { node = target.node; }
+          if (!selector && target.selector != null) { selector = String(target.selector); }
+          if (!node && typeof target.get === 'function') {
+            try {
+              var got = target.get();
+              if (typeof Element !== 'undefined' && got instanceof Element) { node = got; }
+              else if (got && got.nodeType === 1) { node = got; }
+              else if (!selector && typeof got === 'string') { selector = got; }
+            } catch (_g) { }
           }
         }
-        if (!selector) {
-          var gkeyAttr = node.getAttribute('data-m-gkey');
-          if (gkeyAttr) {
-            var gkeyToken = null;
-            var gkeyParts = String(gkeyAttr).split(/[\s,]+/);
-            for (var gp = 0; gp < gkeyParts.length && !gkeyToken; gp++) if (gkeyParts[gp]) gkeyToken = gkeyParts[gp];
-            if (gkeyToken) {
-              selector = '[data-m-gkey~="' + String(gkeyToken).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+
+        if (!node && typeof target === 'string') { selector = selector || String(target); }
+
+        if (!node && selector) {
+          try { node = doc.querySelector(selector); } catch (_q) { node = null; }
+        } else if (!node && typeof target === 'string') {
+          try { node = doc.querySelector(String(target)); } catch (_s) { node = null; }
+        }
+
+        if (!node) return null;
+
+        if (!selector && node.getAttribute) {
+          var keyAttr = node.getAttribute('data-m-key');
+          if (keyAttr) {
+            var keyToken = null;
+            var keyParts = String(keyAttr).split(/[\s,]+/);
+            for (var kp = 0; kp < keyParts.length && !keyToken; kp++) if (keyParts[kp]) keyToken = keyParts[kp];
+            if (keyToken) {
+              selector = '[data-m-key~="' + String(keyToken).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
             } else {
-              selector = '[data-m-gkey="' + String(gkeyAttr).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+              selector = '[data-m-key="' + String(keyAttr).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
             }
           }
-        }
-        if (!selector && node.id) {
-          selector = '#' + String(node.id).replace(/([^a-zA-Z0-9_\-:\.])/g, '\\$1');
-        }
-      }
-
-      var top = (typeof node.scrollTop === 'number') ? node.scrollTop : 0;
-      var left = (typeof node.scrollLeft === 'number') ? node.scrollLeft : 0;
-      if (node === doc.body || node === doc.documentElement) {
-        if (typeof global.scrollY === 'number') top = global.scrollY;
-        if (typeof global.scrollX === 'number') left = global.scrollX;
-      }
-
-      return { node: node, selector: selector, top: top, left: left, isWindow: isWindow };
-    }
-
-    function restoreScrollEntry(entry) {
-      if (!entry) return;
-      var doc = global && global.document;
-      if (entry.isWindow) {
-        var topWin = entry.top != null ? entry.top : 0;
-        var leftWin = entry.left != null ? entry.left : 0;
-        try {
-          if (typeof global.scrollTo === 'function') {
-            try { global.scrollTo({ top: topWin, left: leftWin, behavior: 'instant' }); }
-            catch (_o) { try { global.scrollTo(leftWin, topWin); } catch (_p) { } }
-          } else if (doc && doc.scrollingElement) {
-            if (entry.top != null) doc.scrollingElement.scrollTop = entry.top;
-            if (entry.left != null) doc.scrollingElement.scrollLeft = entry.left;
+          if (!selector) {
+            var gkeyAttr = node.getAttribute('data-m-gkey');
+            if (gkeyAttr) {
+              var gkeyToken = null;
+              var gkeyParts = String(gkeyAttr).split(/[\s,]+/);
+              for (var gp = 0; gp < gkeyParts.length && !gkeyToken; gp++) if (gkeyParts[gp]) gkeyToken = gkeyParts[gp];
+              if (gkeyToken) {
+                selector = '[data-m-gkey~="' + String(gkeyToken).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+              } else {
+                selector = '[data-m-gkey="' + String(gkeyAttr).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+              }
+            }
           }
-        } catch (_w) { }
-        return;
-      }
-
-      var nodeRef = entry.node;
-      if (entry.selector && (!nodeRef || !nodeRef.isConnected || nodeRef.parentNode == null)) {
-        if (doc) {
-          try {
-            var found = doc.querySelector(entry.selector);
-            if (found) nodeRef = entry.node = found;
-          } catch (_r) { }
-        }
-      }
-      if (!nodeRef) return;
-
-      var prevBehavior = null;
-      var behaviorApplied = false;
-      try {
-        if (nodeRef.style && typeof nodeRef.style === 'object') {
-          prevBehavior = nodeRef.style.scrollBehavior;
-          nodeRef.style.scrollBehavior = 'auto';
-          behaviorApplied = true;
-        }
-      } catch (_sb) { behaviorApplied = false; }
-
-      try {
-        if (typeof nodeRef.scrollTo === 'function') {
-          var topVal = entry.top != null ? entry.top : nodeRef.scrollTop;
-          var leftVal = entry.left != null ? entry.left : nodeRef.scrollLeft;
-          try {
-            nodeRef.scrollTo({ top: topVal, left: leftVal, behavior: 'instant' });
-          } catch (_cObj) {
-            try { nodeRef.scrollTo(leftVal, topVal); } catch (_n) { }
-            if (entry.top != null) nodeRef.scrollTop = entry.top;
-            if (entry.left != null) nodeRef.scrollLeft = entry.left;
+          if (!selector && node.id) {
+            selector = '#' + String(node.id).replace(/([^a-zA-Z0-9_\-:\.])/g, '\\$1');
           }
-        } else {
-          if (entry.top != null) nodeRef.scrollTop = entry.top;
-          if (entry.left != null) nodeRef.scrollLeft = entry.left;
         }
-      } catch (_ap) {
-        try {
-          if (entry.top != null) nodeRef.scrollTop = entry.top;
-          if (entry.left != null) nodeRef.scrollLeft = entry.left;
-        } catch (_aq) { }
-      } finally {
-        if (behaviorApplied && nodeRef && nodeRef.style) {
+
+        var top = (typeof node.scrollTop === 'number') ? node.scrollTop : 0;
+        var left = (typeof node.scrollLeft === 'number') ? node.scrollLeft : 0;
+        if (node === doc.body || node === doc.documentElement) {
+          if (typeof global.scrollY === 'number') top = global.scrollY;
+          if (typeof global.scrollX === 'number') left = global.scrollX;
+        }
+
+        return { node: node, selector: selector, top: top, left: left, isWindow: isWindow };
+      }
+
+      function restoreScrollEntry(entry) {
+        if (!entry) return;
+        var doc = global && global.document;
+        if (entry.isWindow) {
+          var topWin = entry.top != null ? entry.top : 0;
+          var leftWin = entry.left != null ? entry.left : 0;
           try {
-            if (prevBehavior && prevBehavior.length) { nodeRef.style.scrollBehavior = prevBehavior; }
-            else if (typeof nodeRef.style.removeProperty === 'function') { nodeRef.style.removeProperty('scroll-behavior'); }
-            else nodeRef.style.scrollBehavior = '';
-          } catch (_be) { }
-        }
-      }
-    }
-
-    function restoreScrollEntries(entries) {
-      if (!entries || !entries.length) return;
-      for (var i = 0; i < entries.length; i++) restoreScrollEntry(entries[i]);
-      var raf = global && typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
-      if (raf) {
-        raf(function () {
-          for (var j = 0; j < entries.length; j++) restoreScrollEntry(entries[j]);
-          raf(function () { for (var k = 0; k < entries.length; k++) restoreScrollEntry(entries[k]); });
-        });
-      } else if (global && typeof global.setTimeout === 'function') {
-        global.setTimeout(function () {
-          for (var j2 = 0; j2 < entries.length; j2++) restoreScrollEntry(entries[j2]);
-          global.setTimeout(function () { for (var k2 = 0; k2 < entries.length; k2++) restoreScrollEntry(entries[k2]); }, 16);
-        }, 0);
-      }
-    }
-
-    function flush(opts) {
-      _scheduled = false;
-      _pendingOpts = mergeOpts(_pendingOpts, opts);
-      if (_freezeDepth > 0 && !(opts && opts.force === true)) {
-        return;
-      }
-
-      applyEnv(_database);
-      var head = _database && _database.head;
-      if (head) Head.batch(head);
-
-      var effective = _pendingOpts || null;
-      var keepScrollEntries = [];
-      var keepScrollTargets = toArr(effective && effective.keepScroll);
-      if (keepScrollTargets.length && global && global.document) {
-        for (var i = 0; i < keepScrollTargets.length; i++) {
-          var entry = captureScrollTarget(keepScrollTargets[i]);
-          if (entry) keepScrollEntries.push(entry);
-        }
-      }
-
-      var options = {
-        freeze: new Set(toArr(effective && effective.except)),
-        only: new Set(toArr(effective && effective.buildonly))
-      };
-
-      var self = ctx;
-      M.Devtools.scheduleRebuild(self, function () {
-        var dsl = assign({ h: VDOM.h }, hAtoms);
-        var next = _bodyFn(_database, dsl);
-        VDOM.patch(_$root, next, _vApp, _database, options, "");
-        _vApp = next;
-        try { M.RuleCenter && M.RuleCenter.evaluate && M.RuleCenter.evaluate('afterRender', { rootEl: _$root, db: _database }, _ctx); }
-        catch (eAR) { M.Auditor.warn('W-AFTER', 'afterRender rules error', { error: String(eAR) }); }
-        if (M.Devtools && M.Devtools.auditOrdersKeys) M.Devtools.auditOrdersKeys(_$root, _ordersArr);
-        if (keepScrollEntries.length) restoreScrollEntries(keepScrollEntries);
-      });
-
-      _dirty = false;
-      _pendingOpts = null;
-    }
-
-    ctx = {
-      root: _$root,
-      getState: function () { return _database; },
-      setState: function (updater) {
-        var draft = (typeof updater === 'function') ? updater(_database) : updater;
-        try {
-          M.Guardian.runPreflight('state', { next: draft, prev: _database }, this);
-        } catch (pf) {
-          M.Auditor.error('E-PREFLIGHT', 'state blocked', pf);
+            if (typeof global.scrollTo === 'function') {
+              try { global.scrollTo({ top: topWin, left: leftWin, behavior: 'instant' }); }
+              catch (_o) { try { global.scrollTo(leftWin, topWin); } catch (_p) { } }
+            } else if (doc && doc.scrollingElement) {
+              if (entry.top != null) doc.scrollingElement.scrollTop = entry.top;
+              if (entry.left != null) doc.scrollingElement.scrollLeft = entry.left;
+            }
+          } catch (_w) { }
           return;
         }
 
-        if (typeof updater === 'function') {
-          _database = draft;
-        } else if (isObj(updater)) {
-          var next = {}, k;
-          for (k in _database) next[k] = _database[k];
-          for (k in updater) next[k] = updater[k];
-          _database = next;
-        } else {
-          _database = draft;
+        var nodeRef = entry.node;
+        if (entry.selector && (!nodeRef || !nodeRef.isConnected || nodeRef.parentNode == null)) {
+          if (doc) {
+            try {
+              var found = doc.querySelector(entry.selector);
+              if (found) nodeRef = entry.node = found;
+            } catch (_r) { }
+          }
         }
+        if (!nodeRef) return;
 
-        _dirty = true;
-        schedule();
-      },
-      flush: function (opts) { flush(opts); },
-      rebuild: function (opts) { flush(opts); },
-      freeze: function (opts) {
-        _freezeDepth++;
-        _pendingOpts = mergeOpts(_pendingOpts, opts);
-        return _freezeDepth;
-      },
-      unfreeze: function (opts) {
-        if (_freezeDepth > 0) _freezeDepth--;
-        _pendingOpts = mergeOpts(_pendingOpts, opts);
-        if (_freezeDepth === 0 && _dirty) flush(null);
-        return _freezeDepth;
-      },
-      batch: function (fn) {
-        this.freeze();
+        var prevBehavior = null;
+        var behaviorApplied = false;
         try {
-          if (typeof fn === 'function') fn(this);
+          if (nodeRef.style && typeof nodeRef.style === 'object') {
+            prevBehavior = nodeRef.style.scrollBehavior;
+            nodeRef.style.scrollBehavior = 'auto';
+            behaviorApplied = true;
+          }
+        } catch (_sb) { behaviorApplied = false; }
+
+        try {
+          if (typeof nodeRef.scrollTo === 'function') {
+            var topVal = entry.top != null ? entry.top : nodeRef.scrollTop;
+            var leftVal = entry.left != null ? entry.left : nodeRef.scrollLeft;
+            try {
+              nodeRef.scrollTo({ top: topVal, left: leftVal, behavior: 'instant' });
+            } catch (_cObj) {
+              try { nodeRef.scrollTo(leftVal, topVal); } catch (_n) { }
+              if (entry.top != null) nodeRef.scrollTop = entry.top;
+              if (entry.left != null) nodeRef.scrollLeft = entry.left;
+            }
+          } else {
+            if (entry.top != null) nodeRef.scrollTop = entry.top;
+            if (entry.left != null) nodeRef.scrollLeft = entry.left;
+          }
+        } catch (_ap) {
+          try {
+            if (entry.top != null) nodeRef.scrollTop = entry.top;
+            if (entry.left != null) nodeRef.scrollLeft = entry.left;
+          } catch (_aq) { }
         } finally {
-          this.unfreeze();
+          if (behaviorApplied && nodeRef && nodeRef.style) {
+            try {
+              if (prevBehavior && prevBehavior.length) { nodeRef.style.scrollBehavior = prevBehavior; }
+              else if (typeof nodeRef.style.removeProperty === 'function') { nodeRef.style.removeProperty('scroll-behavior'); }
+              else nodeRef.style.scrollBehavior = '';
+            } catch (_be) { }
+          }
         }
-      },
-      isFrozen: function () { return _freezeDepth > 0; },
-      isDirty: function () { return !!_dirty; }
-    };
+      }
 
-    return ctx;
-  }
+      function restoreScrollEntries(entries) {
+        if (!entries || !entries.length) return;
+        for (var i = 0; i < entries.length; i++) restoreScrollEntry(entries[i]);
+        var raf = global && typeof global.requestAnimationFrame === 'function' ? global.requestAnimationFrame : null;
+        if (raf) {
+          raf(function () {
+            for (var j = 0; j < entries.length; j++) restoreScrollEntry(entries[j]);
+            raf(function () { for (var k = 0; k < entries.length; k++) restoreScrollEntry(entries[k]); });
+          });
+        } else if (global && typeof global.setTimeout === 'function') {
+          global.setTimeout(function () {
+            for (var j2 = 0; j2 < entries.length; j2++) restoreScrollEntry(entries[j2]);
+            global.setTimeout(function () { for (var k2 = 0; k2 < entries.length; k2++) restoreScrollEntry(entries[k2]); }, 16);
+          }, 0);
+        }
+      }
 
-  function mount(selector) {
-    _$root = (typeof selector === 'string') ? global.document.querySelector(selector) : selector;
-    if (!_$root) { M.Auditor.error('E-MOUNT', 'mount target not found: ' + selector); return; }
+      function flush(opts) {
+        _scheduled = false;
+        _pendingOpts = mergeOpts(_pendingOpts, opts);
+        if (_freezeDepth > 0 && !(opts && opts.force === true)) {
+          return;
+        }
 
-    i18nCompatFromDict(_database);
-    applyEnv(_database);
+        applyEnv(_database);
+        var head = _database && _database.head;
+        if (head) Head.batch(head);
 
-    _ordersArr = normalizeOrders(_ordersObj);
-    _ctx = createContext();
+        var effective = _pendingOpts || null;
+        var keepScrollEntries = [];
+        var keepScrollTargets = toArr(effective && effective.keepScroll);
+        if (keepScrollTargets.length && global && global.document) {
+          for (var i = 0; i < keepScrollTargets.length; i++) {
+            var entry = captureScrollTarget(keepScrollTargets[i]);
+            if (entry) keepScrollEntries.push(entry);
+          }
+        }
 
-    if (_delegation) { try { _delegation.teardown(); } catch (_) { } }
-    _delegation = setupDelegation(_$root, _ctx, _ordersArr, {});
+        var options = {
+          freeze: new Set(toArr(effective && effective.except)),
+          only: new Set(toArr(effective && effective.buildonly))
+        };
 
-    var dsl = assign({ h: VDOM.h }, hAtoms);
-    _vApp = _bodyFn(_database, dsl);
-    _$root.innerHTML = "";
-    _$root.appendChild(VDOM.render(_vApp, _database));
+        var self = ctx;
+        M.Devtools.scheduleRebuild(self, function () {
+          var dsl = assign({ h: VDOM.h }, hAtoms);
+          var next = _bodyFn(_database, dsl);
+          VDOM.patch(_$root, next, _vApp, _database, options, "");
+          _vApp = next;
+          try { M.RuleCenter && M.RuleCenter.evaluate && M.RuleCenter.evaluate('afterRender', { rootEl: _$root, db: _database }, _ctx); }
+          catch (eAR) { M.Auditor.warn('W-AFTER', 'afterRender rules error', { error: String(eAR) }); }
+          if (M.Devtools && M.Devtools.auditOrdersKeys) M.Devtools.auditOrdersKeys(_$root, _ordersArr);
+          if (keepScrollEntries.length) restoreScrollEntries(keepScrollEntries);
+        });
 
-    if (M.Devtools && M.Devtools.auditOrdersKeys) M.Devtools.auditOrdersKeys(_$root, _ordersArr);
-    // يمكن لو أردت: لف الشبكة عند توفر الـAuditor الكامل
-    if (M.Auditor && M.Auditor.timing && M.Auditor.timing.wrapNetworkingOnce) {
-      try { M.Auditor.timing.wrapNetworkingOnce(_database); } catch (_) { }
+        _dirty = false;
+        _pendingOpts = null;
+      }
+
+      ctx = {
+        root: _$root,
+        getState: function () { return _database; },
+        setState: function (updater) {
+          var draft = (typeof updater === 'function') ? updater(_database) : updater;
+          try {
+            M.Guardian.runPreflight('state', { next: draft, prev: _database }, this);
+          } catch (pf) {
+            M.Auditor.error('E-PREFLIGHT', 'state blocked', pf);
+            return;
+          }
+
+          if (typeof updater === 'function') {
+            _database = draft;
+          } else if (isObj(updater)) {
+            var next = {}, k;
+            for (k in _database) next[k] = _database[k];
+            for (k in updater) next[k] = updater[k];
+            _database = next;
+          } else {
+            _database = draft;
+          }
+
+          _dirty = true;
+          schedule();
+        },
+        flush: function (opts) { flush(opts); },
+        rebuild: function (opts) { flush(opts); },
+        freeze: function (opts) {
+          _freezeDepth++;
+          _pendingOpts = mergeOpts(_pendingOpts, opts);
+          return _freezeDepth;
+        },
+        unfreeze: function (opts) {
+          if (_freezeDepth > 0) _freezeDepth--;
+          _pendingOpts = mergeOpts(_pendingOpts, opts);
+          if (_freezeDepth === 0 && _dirty) flush(null);
+          return _freezeDepth;
+        },
+        batch: function (fn) {
+          this.freeze();
+          try {
+            if (typeof fn === 'function') fn(this);
+          } finally {
+            this.unfreeze();
+          }
+        },
+        isFrozen: function () { return _freezeDepth > 0; },
+        isDirty: function () { return !!_dirty; }
+      };
+
+      return ctx;
+    }
+
+    function mount(selector) {
+      _$root = (typeof selector === 'string') ? global.document.querySelector(selector) : selector;
+      if (!_$root) { M.Auditor.error('E-MOUNT', 'mount target not found: ' + selector); return; }
+
+      i18nCompatFromDict(_database);
+      applyEnv(_database);
+
+      _ordersArr = normalizeOrders(_ordersObj);
+      _ctx = createContext();
+
+      if (_delegation) { try { _delegation.teardown(); } catch (_) { } }
+      _delegation = setupDelegation(_$root, _ctx, _ordersArr, {});
+
+      var dsl = assign({ h: VDOM.h }, hAtoms);
+      _vApp = _bodyFn(_database, dsl);
+      _$root.innerHTML = "";
+      _$root.appendChild(VDOM.render(_vApp, _database));
+
+      if (M.Devtools && M.Devtools.auditOrdersKeys) M.Devtools.auditOrdersKeys(_$root, _ordersArr);
+      // يمكن لو أردت: لف الشبكة عند توفر الـAuditor الكامل
+      if (M.Auditor && M.Auditor.timing && M.Auditor.timing.wrapNetworkingOnce) {
+        try { M.Auditor.timing.wrapNetworkingOnce(_database); } catch (_) { }
+      }
+    }
+
+    function createApp(database, orders) {
+      _database = database || {};
+      _ordersObj = orders || {};
+      _ordersArr = normalizeOrders(_ordersObj);
+      var instance = {
+        mount: function (selector) {
+          instance.__appMountTarget = selector;
+          mount(selector);
+          instance.root = _$root;
+        },
+        setOrders: function (next) {
+          _ordersObj = next || {};
+          _ordersArr = normalizeOrders(_ordersObj);
+          if (_delegation) _delegation.teardown();
+          _delegation = setupDelegation(_$root, _ctx || createContext(), _ordersArr, {});
+          if (M.Devtools && M.Devtools.auditOrdersKeys) M.Devtools.auditOrdersKeys(_$root, _ordersArr);
+        },
+        getOrders: function () { return _ordersArr.slice(); },
+        getState: function () {
+          if (_ctx && _ctx.getState) return _ctx.getState();
+          return _database;
+        },
+        setState: function (updater) {
+          if (_ctx && _ctx.setState) {
+            _ctx.setState(updater);
+          } else if (typeof updater === 'function') {
+            _database = updater(_database);
+          } else if (isObj(updater)) {
+            _database = assign({}, _database, updater);
+          }
+        },
+        rebuild: function (opts) { if (_ctx && _ctx.rebuild) _ctx.rebuild(opts); },
+        flush: function (opts) { if (_ctx && _ctx.flush) _ctx.flush(opts); },
+        freeze: function (opts) { return _ctx && _ctx.freeze ? _ctx.freeze(opts) : 0; },
+        unfreeze: function (opts) { return _ctx && _ctx.unfreeze ? _ctx.unfreeze(opts) : 0; },
+        isFrozen: function () { return _ctx && _ctx.isFrozen ? _ctx.isFrozen() : false; },
+        isDirty: function () { return _ctx && _ctx.isDirty ? _ctx.isDirty() : false; }
+      };
+      Object.defineProperty(instance, 'state', {
+        configurable: true,
+        enumerable: false,
+        get: function () {
+          return instance.getState();
+        }
+      });
+      registerAppInstance(instance);
+      return instance;
+    }
+
+    return { setBody: setBody, createApp: createApp };
+  })();
+
+  // -------------------------------------------------------------------
+  // Exports
+  // -------------------------------------------------------------------
+  // 1. Flatten DSL (D.Div بدلًا من D.Containers.Div)
+  var flatDSL = {};
+  for (var cat in hAtoms) {
+    flatDSL[cat] = hAtoms[cat];
+    for (var tag in hAtoms[cat]) {
+      if (!flatDSL[tag]) flatDSL[tag] = hAtoms[cat][tag];
     }
   }
+  // احتفظ بدالة h داخل الـDSL لعدم كسر التوافق
+  flatDSL.h = VDOM.h;
 
-  function createApp(database, orders) {
-    _database = database || {};
-    _ordersObj = orders || {};
-    _ordersArr = normalizeOrders(_ordersObj);
-    var instance = {
-      mount: function (selector) {
-        instance.__appMountTarget = selector;
-        mount(selector);
-        instance.root = _$root;
-      },
-      setOrders: function (next) {
-        _ordersObj = next || {};
-        _ordersArr = normalizeOrders(_ordersObj);
-        if (_delegation) _delegation.teardown();
-        _delegation = setupDelegation(_$root, _ctx || createContext(), _ordersArr, {});
-        if (M.Devtools && M.Devtools.auditOrdersKeys) M.Devtools.auditOrdersKeys(_$root, _ordersArr);
-      },
-      getOrders: function () { return _ordersArr.slice(); },
-      getState: function () {
-        if (_ctx && _ctx.getState) return _ctx.getState();
-        return _database;
-      },
-      setState: function (updater) {
-        if (_ctx && _ctx.setState) {
-          _ctx.setState(updater);
-        } else if (typeof updater === 'function') {
-          _database = updater(_database);
-        } else if (isObj(updater)) {
-          _database = assign({}, _database, updater);
-        }
-      },
-      rebuild: function (opts) { if (_ctx && _ctx.rebuild) _ctx.rebuild(opts); },
-      flush: function (opts) { if (_ctx && _ctx.flush) _ctx.flush(opts); },
-      freeze: function (opts) { return _ctx && _ctx.freeze ? _ctx.freeze(opts) : 0; },
-      unfreeze: function (opts) { return _ctx && _ctx.unfreeze ? _ctx.unfreeze(opts) : 0; },
-      isFrozen: function () { return _ctx && _ctx.isFrozen ? _ctx.isFrozen() : false; },
-      isDirty: function () { return _ctx && _ctx.isDirty ? _ctx.isDirty() : false; }
-    };
-    Object.defineProperty(instance, 'state', {
-      configurable: true,
-      enumerable: false,
-      get: function () {
-        return instance.getState();
-      }
-    });
-    registerAppInstance(instance);
-    return instance;
-  }
+  M.DSL = flatDSL;
+  M.h = VDOM.h;
+  M.VDOM = VDOM;
+  M.Head = Head;
+  M.app = App;
+  Object.defineProperty(M.app, 'state', {
+    configurable: true,
+    enumerable: false,
+    get: function () {
+      var active = global.__MISHKAH_LAST_APP__;
+      return active && active.getState ? active.getState() : null;
+    }
+  });
 
-  return { setBody: setBody, createApp: createApp };
-})();
+  // keep contracts on global M for replacement by full modules
+  // (already created above if missing): M.Auditor, M.RuleCenter, M.Guardian, M.Devtools
 
-// -------------------------------------------------------------------
-// Exports
-// -------------------------------------------------------------------
-// 1. Flatten DSL (D.Div بدلًا من D.Containers.Div)
-var flatDSL = {};
-for (var cat in hAtoms) {
-  flatDSL[cat] = hAtoms[cat];
-  for (var tag in hAtoms[cat]) {
-    if (!flatDSL[tag]) flatDSL[tag] = hAtoms[cat][tag];
-  }
-}
-// احتفظ بدالة h داخل الـDSL لعدم كسر التوافق
-flatDSL.h = VDOM.h;
+  M.configure = function (opts) { if (M.Devtools && M.Devtools.config) M.Devtools.config(opts || {}); };
+  M.hmr = (M.Devtools && M.Devtools.HMR) ? M.Devtools.HMR : { enabled: false, enable: function () { this.enabled = true; }, ping: function () { } };
 
-M.DSL = flatDSL;
-M.h = VDOM.h;
-M.VDOM = VDOM;
-M.Head = Head;
-M.app = App;
-Object.defineProperty(M.app, 'state', {
-  configurable: true,
-  enumerable: false,
-  get: function () {
-    var active = global.__MISHKAH_LAST_APP__;
-    return active && active.getState ? active.getState() : null;
-  }
-});
-
-// keep contracts on global M for replacement by full modules
-// (already created above if missing): M.Auditor, M.RuleCenter, M.Guardian, M.Devtools
-
-M.configure = function (opts) { if (M.Devtools && M.Devtools.config) M.Devtools.config(opts || {}); };
-M.hmr = (M.Devtools && M.Devtools.HMR) ? M.Devtools.HMR : { enabled: false, enable: function () { this.enabled = true; }, ping: function () { } };
-
-return M;
+  return M;
 }));
