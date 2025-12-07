@@ -156,7 +156,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Alpine-like Counter</title>
-  <script src="../lib/mishkah-svelte.js"></script>
   <script src="../lib/mishkah-alpine.js"></script>
   <style>
     body { font-family: system-ui; background:#0f172a; color:#e2e8f0; padding:40px; }
