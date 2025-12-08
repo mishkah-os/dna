@@ -404,14 +404,25 @@
                                 article.updatedAt ? new Date(article.updatedAt).toLocaleDateString() : '-'
                             ])
                         ]),
-                        D.Forms.Button({
-                            attrs: {
-                                gkey: 'wiki:article:edit',
-                                class: tw`${token('btn/soft')} ${token('btn/md')} flex items-center gap-2`
-                            }
-                        }, [
-                            D.Text.Span({}, ['✏️']),
-                            D.Text.Span({}, [t('wiki.edit', state)])
+                        D.Containers.Div({ attrs: { class: tw`flex items-center gap-2` } }, [
+                            D.Forms.Button({
+                                attrs: {
+                                    gkey: 'wiki:article:edit',
+                                    class: tw`${token('btn/soft')} ${token('btn/md')} flex items-center gap-2`
+                                }
+                            }, [
+                                D.Text.Span({}, ['✏️']),
+                                D.Text.Span({}, [t('wiki.edit', state)])
+                            ]),
+                            D.Forms.Button({
+                                attrs: {
+                                    gkey: 'wiki:article:delete',
+                                    class: tw`${token('btn/destructive')} ${token('btn/md')} flex items-center gap-2`
+                                }
+                            }, [
+                                D.Text.Span({}, ['🗑️']),
+                                D.Text.Span({}, [t('wiki.delete', state)])
+                            ])
                         ])
                     ]),
 
