@@ -614,6 +614,54 @@
         </div>
     </div>
 
+    <!-- Download Progress Modal -->
+    <div class="modal-overlay" id="download-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">📥 جاري التحميل...</h3>
+                <button class="modal-close" onclick="closeDownloadModal()">×</button>
+            </div>
+            <div style="padding: 20px;">
+                <div id="download-model-name" style="font-size: 1.2rem; margin-bottom: 10px; font-weight: 600;"></div>
+
+                <!-- Progress Bar -->
+                <div
+                    style="background: rgba(255,255,255,0.1); height: 30px; border-radius: 15px; overflow: hidden; margin: 20px 0;">
+                    <div id="download-progress-bar"
+                        style="height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.9rem; font-weight: 600;">
+                        0%
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div
+                    style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; text-align: center;">
+                    <div>
+                        <div style="color: #a0aec0; font-size: 0.85rem;">المح مّل</div>
+                        <div id="download-size" style="font-size: 1.1rem; font-weight: 600;">0 MB</div>
+                    </div>
+                    <div>
+                        <div style="color: #a0aec0; font-size: 0.85rem;">السرعة</div>
+                        <div id="download-speed" style="font-size: 1.1rem; font-weight: 600;">0 MB/s</div>
+                    </div>
+                    <div>
+                        <div style="color: #a0aec0; font-size: 0.85rem;">الوقت المتبقي</div>
+                        <div id="download-eta" style="font-size: 1.1rem; font-weight: 600;">--</div>
+                    </div>
+                </div>
+
+                <!-- Logs -->
+                <div style="margin-top: 20px;">
+                    <div style="color: #a0aec0; font-size: 0.85rem; margin-bottom: 8px;">سجل التحميل:</div>
+                    <div id="download-logs"
+                        style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; line-height: 1.6;">
+                        <div style="color: #48bb78;">● جاري الاتصال بالخادم...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '/api';
         let currentModel = null;
@@ -725,6 +773,15 @@
         // Download model
         async function downloadModel(modelId) {
             try {
+                // Find model info
+                const allModels = [...catalog.text, ...catalog.vision, ...catalog.audio, ...catalog.multimodal];
+                const model = allModels.find(m => m.id === modelId);
+
+                // Open download modal
+                document.getElementById('download-model-name').textContent = model ? model.name : modelId;
+                document.getElementById('download-modal').classList.add('active');
+                addDownloadLog('● بدء التحميل...');
+
                 // Update UI to show downloading
                 updateModelStatus(modelId, 'downloading');
 
@@ -739,17 +796,18 @@
                 if (response.ok) {
                     // Start polling for status updates
                     console.log(`Download started: ${result.message}`);
+                    addDownloadLog(`✓ ${result.message}`);
                     pollModelStatus(modelId);
                 } else {
                     // Error occurred
                     updateModelStatus(modelId, 'error');
+                    addDownloadLog(`✗ فشل: ${result.detail || result.message}`, 'error');
                     console.error(`Download failed: ${result.detail || result.message}`);
-                    alert(`فشل التحميل: ${result.detail || result.message}`);
                 }
             } catch (error) {
                 console.error('Download failed:', error);
                 updateModelStatus(modelId, 'error');
-                alert(`خطأ في التحميل: ${error.message}`);
+                addDownloadLog(`✗ خطأ: ${error.message}`, 'error');
             }
         }
 
@@ -857,6 +915,25 @@
         function closeModal() {
             document.getElementById('chat-modal').classList.remove('active');
             currentModel = null;
+        }
+
+        // Close download modal
+        function closeDownloadModal() {
+            document.getElementById('download-modal').classList.remove('active');
+        }
+
+        // Add download log entry
+        function addDownloadLog(message, type = 'info') {
+            const logsDiv = document.getElementById('download-logs');
+            const timestamp = new Date().toLocaleTimeString('ar-EG');
+            const color = type === 'error' ? '#fc8181' : type === 'success' ? '#48bb78' : '#e0e6ed';
+
+            const logEntry = document.createElement('div');
+            logEntry.style.color = color;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
         }
 
         // Send message

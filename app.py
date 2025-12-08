@@ -42,6 +42,10 @@ app.include_router(models.router, prefix="/api", tags=["models"])
 app.include_router(experiments.router, prefix="/api", tags=["experiments"])
 app.include_router(patterns.router, prefix="/api", tags=["patterns"])
 
+# System monitoring
+from api import system
+app.include_router(system.router, prefix="/api", tags=["🖥️ System Monitor"])
+
 
 
 @app.on_event("startup")
