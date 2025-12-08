@@ -32,7 +32,7 @@ async def init_database():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
-    print(f"✅ Database created at: {DB_PATH}")
+    print(f"[OK] Database created at: {DB_PATH}")
 
 
 async def get_db():
