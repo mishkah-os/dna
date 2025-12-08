@@ -1321,7 +1321,7 @@ function startApp() {
             D.Containers.Div({
                 attrs: {
                     class: 'flex-1 overflow-auto',
-                    style: 'background: white;'
+                    style: 'background: var(--background);'
                 }
             }, db.activePreviewTab === 'execute' ? [
                 // Execute: iframe
