@@ -64,7 +64,7 @@ function startApp() {
         code: '', // Will be loaded async
         previewSrc: '',
         showReadme: false,
-        activePreviewTab: 'result', // 'result' | 'code-wiki' | 'example-wiki'
+        activePreviewTab: 'execute', // 'execute' | 'code-wiki' | 'example-info' | 'full-wiki'
         showHistoryModal: false,
         codeHistory: [],
         // Modal State
@@ -72,6 +72,12 @@ function startApp() {
         modalMode: 'add', // 'add' | 'edit'
         modalSize: 'lg',
         modalFrameworks: [],
+        modalImplementations: [],
+        modalExampleWiki: '',
+
+        // Wiki Data
+        wikiArticles: window.codewikidb || [],
+        activeWikiId: (window.codewikidb && window.codewikidb[0]?.id) || null,
 
         // Persistence State
         examples: [...EXAMPLES], // Start with static, merge dynamic later
@@ -137,6 +143,36 @@ function startApp() {
         return code;
     }
 
+    function renderWikiArticle(db, wikiId, options = {}) {
+        const articles = db.wikiArticles || window.codewikidb || [];
+        const article = articles.find(a => a.id === wikiId);
+        const lang = db.env.lang;
+
+        if (!wikiId) {
+            return D.Text.P({ attrs: { class: 'p-6 text-center text-sm text-gray-500' } }, [
+                lang === 'ar' ? 'لا يوجد معرف ويكي محدد.' : 'No wiki ID provided.'
+            ]);
+        }
+
+        if (!article) {
+            return D.Text.P({ attrs: { class: 'p-6 text-center text-sm text-red-500' } }, [
+                lang === 'ar' ? 'المقالة غير موجودة في الويكي.' : 'Wiki article not found.'
+            ]);
+        }
+
+        const title = article.title?.[lang] || article.title?.en || wikiId;
+        const content = article.content?.[lang] || article.content?.en || '';
+
+        const markdown = M.UI?.Markdown
+            ? M.UI.Markdown({ content, className: 'prose max-w-none' })
+            : D.Containers.RawHtml({ html: content.replace(/\n/g, '<br>') });
+
+        return D.Containers.Div({ attrs: { class: 'p-6 space-y-4' } }, [
+            options.hideHeading ? null : D.Text.H3({ attrs: { class: 'text-xl font-semibold' } }, [title]),
+            markdown
+        ]);
+    }
+
     function getFrameworksForExample(example) {
         if (!example) return [];
         const fromImplementations = Array.isArray(example.implementations)
@@ -152,6 +188,40 @@ function startApp() {
         const frameworks = getFrameworksForExample(example);
         if (frameworks.includes(activeFramework)) return activeFramework;
         return frameworks[0] || Object.keys(FRAMEWORKS)[0];
+    }
+
+    function buildImplementations(example) {
+        if (!example) {
+            const firstFramework = Object.keys(FRAMEWORKS)[0];
+            return [{
+                uid: `impl-${Date.now()}`,
+                framework: firstFramework,
+                code: '',
+                wikiId: ''
+            }];
+        }
+
+        if (Array.isArray(example.implementations) && example.implementations.length) {
+            return example.implementations.map((impl, idx) => ({
+                uid: `impl-${example.id || 'x'}-${idx}`,
+                framework: impl.framework,
+                code: impl.code || '',
+                wikiId: impl.wikiId || ''
+            }));
+        }
+
+        const codeEntries = example.code ? Object.entries(example.code) : [];
+        if (codeEntries.length === 0) {
+            const fallbackFramework = Object.keys(FRAMEWORKS)[0];
+            return [{ uid: `impl-${example.id || 'x'}-0`, framework: fallbackFramework, code: '', wikiId: '' }];
+        }
+
+        return codeEntries.map(([fw, code], idx) => ({
+            uid: `impl-${example.id || 'x'}-${idx}`,
+            framework: fw,
+            code: typeof code === 'string' ? code : '',
+            wikiId: ''
+        }));
     }
 
     // Debounce function for auto-save
@@ -374,6 +444,14 @@ function startApp() {
                 ctx.setState(s => ({ ...s, activePreviewTab: tab }));
             }
         },
+        'wiki.full.select': {
+            on: ['input', 'change'],
+            gkeys: ['full-wiki-select'],
+            handler: (e, ctx) => {
+                const value = (e.target.value || '').trim();
+                ctx.setState(s => ({ ...s, activeWikiId: value || s.activeWikiId }));
+            }
+        },
         'app.init': {
             on: ['init'],
             handler: async (e, ctx) => {
@@ -513,8 +591,22 @@ function startApp() {
             on: ['click'],
             gkeys: ['add-example-btn'],
             handler: (e, ctx) => {
-                const defaults = Object.keys(FRAMEWORKS).slice(0, 5);
-                ctx.setState(s => ({ ...s, showModal: true, modalMode: 'add', modalFrameworks: defaults }));
+                const defaults = Object.keys(FRAMEWORKS).slice(0, 1);
+                const implementations = defaults.map((fw, idx) => ({
+                    uid: `impl-new-${idx}-${Date.now()}`,
+                    framework: fw,
+                    code: '',
+                    wikiId: ''
+                }));
+
+                ctx.setState(s => ({
+                    ...s,
+                    showModal: true,
+                    modalMode: 'add',
+                    modalFrameworks: defaults,
+                    modalImplementations: implementations.length ? implementations : buildImplementations(null),
+                    modalExampleWiki: ''
+                }));
             }
         },
 
@@ -524,7 +616,14 @@ function startApp() {
             handler: (e, ctx) => {
                 const currentExample = ctx.getState().examples.find(ex => ex.id === ctx.getState().activeExample);
                 const fws = getFrameworksForExample(currentExample);
-                ctx.setState(s => ({ ...s, showModal: true, modalMode: 'edit', modalFrameworks: fws }));
+                ctx.setState(s => ({
+                    ...s,
+                    showModal: true,
+                    modalMode: 'edit',
+                    modalFrameworks: fws,
+                    modalImplementations: buildImplementations(currentExample),
+                    modalExampleWiki: currentExample?.wikiId || ''
+                }));
             }
         },
 
@@ -532,14 +631,50 @@ function startApp() {
             on: ['click'],
             gkeys: ['add-framework-btn'],
             handler: (e, ctx) => {
-                const select = document.getElementById('framework-select');
-                if (!select) return;
-                const value = select.value;
-                if (!value) return;
                 ctx.setState(s => {
-                    const list = Array.isArray(s.modalFrameworks) ? [...s.modalFrameworks] : [];
-                    if (!list.includes(value)) list.push(value);
-                    return { ...s, modalFrameworks: list };
+                    const list = Array.isArray(s.modalImplementations) ? [...s.modalImplementations] : [];
+                    const nextFramework = Object.keys(FRAMEWORKS)[list.length % Object.keys(FRAMEWORKS).length] || 'custom';
+                    list.push({
+                        uid: `impl-${Date.now()}-${list.length}`,
+                        framework: nextFramework,
+                        code: '',
+                        wikiId: ''
+                    });
+                    return { ...s, modalImplementations: list };
+                });
+            }
+        },
+
+        'modal.remove_framework': {
+            on: ['click'],
+            gkeys: ['remove-framework-btn'],
+            handler: (e, ctx) => {
+                const btn = e.target.closest('[data-impl-uid]');
+                if (!btn) return;
+                const uid = btn.dataset.implUid;
+                ctx.setState(s => {
+                    const list = Array.isArray(s.modalImplementations) ? s.modalImplementations.filter(impl => impl.uid !== uid) : [];
+                    return { ...s, modalImplementations: list.length ? list : buildImplementations(null) };
+                });
+            }
+        },
+
+        'modal.update_impl_field': {
+            on: ['input', 'change'],
+            gkeys: ['impl-field'],
+            handler: (e, ctx) => {
+                const target = e.target;
+                const uid = target.dataset.implUid;
+                const field = target.dataset.field;
+                if (!uid || !field) return;
+
+                ctx.setState(s => {
+                    const list = Array.isArray(s.modalImplementations) ? [...s.modalImplementations] : [];
+                    const idx = list.findIndex(impl => impl.uid === uid);
+                    if (idx === -1) return s;
+                    const updated = { ...list[idx], [field]: target.value };
+                    list[idx] = updated;
+                    return { ...s, modalImplementations: list };
                 });
             }
         },
@@ -558,9 +693,9 @@ function startApp() {
             handler: async (e, ctx) => {
                 const state = ctx.getState();
                 const isEdit = state.modalMode === 'edit';
-                const frameworksToSave = Array.isArray(state.modalFrameworks) && state.modalFrameworks.length
-                    ? state.modalFrameworks
-                    : Object.keys(FRAMEWORKS);
+                const rawImplementations = Array.isArray(state.modalImplementations)
+                    ? state.modalImplementations
+                    : buildImplementations(null);
 
                 // Collect form data
                 const titleAr = document.getElementById('title-ar').value;
@@ -569,14 +704,23 @@ function startApp() {
                 const readmeAr = document.getElementById('readme-ar');
                 const readmeEn = document.getElementById('readme-en');
 
-                const implementations = frameworksToSave.map(fw => {
-                    const el = document.getElementById(`code-${fw}`);
-                    return { framework: fw, code: el ? el.value : '' };
-                }).filter(item => item.code && item.code.trim().length > 0);
+                const implementations = rawImplementations.map(impl => {
+                    const fwInput = document.getElementById(`impl-fw-${impl.uid}`);
+                    const wikiInput = document.getElementById(`impl-wiki-${impl.uid}`);
+                    const codeInput = document.getElementById(`impl-code-${impl.uid}`);
+
+                    return {
+                        framework: (fwInput?.value || impl.framework || '').trim(),
+                        code: codeInput ? codeInput.value : (impl.code || ''),
+                        wikiId: (wikiInput?.value || impl.wikiId || '').trim()
+                    };
+                }).filter(item => item.framework && item.code && item.code.trim().length > 0);
                 const codeObj = implementations.reduce((acc, impl) => {
                     acc[impl.framework] = impl.code;
                     return acc;
                 }, {});
+
+                const exampleWikiId = (document.getElementById('example-wiki-id')?.value || state.modalExampleWiki || '').trim();
 
                 const newExample = {
                     id: id,
@@ -585,6 +729,7 @@ function startApp() {
                         ar: document.getElementById('desc-ar').value,
                         en: document.getElementById('desc-en').value
                     },
+                    wikiId: exampleWikiId,
                     readme: {
                         ar: readmeAr?.value || '',
                         en: readmeEn?.value || ''
@@ -596,6 +741,10 @@ function startApp() {
                 // Save to 'examples' table
                 const saved = await dbAdapter.load('examples');
                 const list = Array.isArray(saved?.data) ? saved.data : [];
+                const existing = list.find(ex => ex.id === id);
+                if (existing?.userCode) {
+                    newExample.userCode = existing.userCode;
+                }
 
                 if (isEdit) {
                     const idx = list.findIndex(ex => ex.id === id);
@@ -611,19 +760,26 @@ function startApp() {
                 const reloaded = await dbAdapter.load('examples');
                 const allExamples = [...EXAMPLES, ...(reloaded?.data || [])];
 
+                const nextFramework = implementations.find(impl => impl.framework === state.activeFramework)
+                    ? state.activeFramework
+                    : (implementations[0]?.framework || state.activeFramework);
+                const nextCode = newExample.code[nextFramework] || '';
+
                 ctx.setState(s => ({
                     ...s,
                     showModal: false,
                     examples: allExamples,
                     activeExample: id,
-                    code: newExample.code[s.activeFramework],
-                    previewSrc: generatePreview(s.activeFramework, newExample.code[s.activeFramework])
+                    activeFramework: nextFramework,
+                    activeWikiId: newExample.wikiId || s.activeWikiId,
+                    code: nextCode,
+                    previewSrc: generatePreview(nextFramework, nextCode)
                 }));
 
                 window._ignoringCodeMirrorChange = true;
 
                 if (M.UI.CodeMirror.setValue) {
-                    M.UI.CodeMirror.setValue('editor', newExample.code[state.activeFramework]);
+                    M.UI.CodeMirror.setValue('editor', nextCode);
                 }
 
                 setTimeout(() => {
@@ -710,6 +866,7 @@ function startApp() {
                     activeFramework: nextFramework,
                     code: code,
                     hasUserCode: isUser,
+                    activeWikiId: nextExample?.wikiId || s.activeWikiId,
                     previewSrc: generatePreview(nextFramework, code),
                     showReadme: false
                 }));
@@ -1103,6 +1260,8 @@ function startApp() {
         // Get wiki IDs
         const codeWikiId = implementation?.wikiId || null;
         const exampleWikiId = example?.wikiId || null;
+        const wikiOptions = db.wikiArticles || [];
+        const fullWikiId = db.activeWikiId || exampleWikiId || wikiOptions[0]?.id || null;
 
         return D.Containers.Div({
             attrs: {
@@ -1162,7 +1321,7 @@ function startApp() {
             D.Containers.Div({
                 attrs: {
                     class: 'flex-1 overflow-auto',
-                    style: 'background: white;'
+                    style: 'background: var(--background);'
                 }
             }, db.activePreviewTab === 'execute' ? [
                 // Execute: iframe
@@ -1174,31 +1333,30 @@ function startApp() {
                         sandbox: 'allow-scripts allow-modals allow-same-origin'
                     }
                 })
-            ] : db.activePreviewTab === 'code-wiki' && codeWikiId && M.UI.WikiMini ? [
-                // Code Wiki (WikiMini)
-                M.UI.WikiMini({
-                    wikiId: codeWikiId,
-                    lang: db.env.lang
-                })
-            ] : db.activePreviewTab === 'example-info' && exampleWikiId && M.UI.WikiMini ? [
-                // Example Info (WikiMini)
-                M.UI.WikiMini({
-                    wikiId: exampleWikiId,
-                    lang: db.env.lang
-                })
-            ] : db.activePreviewTab === 'full-wiki' && M.UI.WikiViewer ? [
-                // Full Wiki (WikiViewer)
-                M.UI.WikiViewer({
-                    db: db,
-                    wikiId: db.activeWikiId || exampleWikiId, // Fallback to example wiki if no active wiki
-                    onNavigate: (id) => {
-                        // We need to update state to change the active wiki article
-                        // This requires access to the app instance or a way to dispatch
-                        if (window.MishkahApp) {
-                            window.MishkahApp.setState(s => ({ ...s, activeWikiId: id }));
-                        }
-                    }
-                })
+            ] : db.activePreviewTab === 'code-wiki' ? [
+                renderWikiArticle(db, codeWikiId)
+            ] : db.activePreviewTab === 'example-info' ? [
+                renderWikiArticle(db, exampleWikiId)
+            ] : db.activePreviewTab === 'full-wiki' ? [
+                D.Containers.Div({ attrs: { class: 'p-4 space-y-3' } }, [
+                    D.Containers.RawHtml({
+                        html: `<datalist id="full-wiki-options">${(wikiOptions || []).map(a => `<option value="${a.id}">${a.title?.[db.env.lang] || a.title?.en || a.id}</option>`).join('')}</datalist>`
+                    }),
+                    M.UI.Field({
+                        id: 'full-wiki-id',
+                        label: db.env.lang === 'ar' ? 'مقالة الويكي' : 'Wiki Article',
+                        control: M.UI.Input({
+                            attrs: {
+                                id: 'full-wiki-id',
+                                list: 'full-wiki-options',
+                                value: fullWikiId || '',
+                                placeholder: db.env.lang === 'ar' ? 'اختر مقالة' : 'Choose an article',
+                                gkey: 'full-wiki-select'
+                            }
+                        })
+                    }),
+                    renderWikiArticle(db, fullWikiId, { hideHeading: false })
+                ])
             ] : [
                 D.Text.P({ attrs: { class: 'p-8 text-center' } }, [
                     db.env.lang === 'ar'
@@ -1211,15 +1369,12 @@ function startApp() {
 
     function ExampleModal(db) {
         const isEdit = db.modalMode === 'edit';
-        const example = db.examples.find(ex => ex.id === db.activeExample);
-
-        const frameworksList = Array.isArray(db.modalFrameworks) && db.modalFrameworks.length
-            ? db.modalFrameworks
-            : getFrameworksForExample(example);
-        const suggested = Object.keys(FRAMEWORKS)
-            .filter(fw => !frameworksList.includes(fw))
-            .slice(0, 10)
-            .join(', ');
+        const example = isEdit ? db.examples.find(ex => ex.id === db.activeExample) : null;
+        const implementations = Array.isArray(db.modalImplementations) && db.modalImplementations.length
+            ? db.modalImplementations
+            : buildImplementations(example);
+        const frameworksOptions = Object.keys(FRAMEWORKS);
+        const wikiOptions = Array.from(new Set((window.codewikidb || []).map(a => a.id))).sort();
 
         // Helper to get value safely
         const val = (path, lang) => {
@@ -1237,13 +1392,74 @@ function startApp() {
             return '';
         };
 
-        const frameworkFields = frameworksList.map(fw => {
-            const label = FRAMEWORKS[fw]?.name?.[db.env.lang] || fw;
-            return M.UI.Field({
-                id: `code-${fw}`,
-                label,
-                control: M.UI.Textarea({ attrs: { id: `code-${fw}`, rows: 3, class: 'font-mono text-xs', style: 'min-height: 200px;', value: codeVal(fw) } })
-            });
+        const frameworkFields = implementations.map(impl => {
+            const label = FRAMEWORKS[impl.framework]?.name?.[db.env.lang] || impl.framework || 'Framework';
+            return D.Containers.Div({
+                attrs: { class: 'border rounded-md p-3 space-y-2 bg-[var(--muted)]/30' }
+            }, [
+                D.Containers.Div({ attrs: { class: 'flex items-center gap-2' } }, [
+                    M.UI.Field({
+                        id: `impl-fw-${impl.uid}`,
+                        label: db.env.lang === 'ar' ? 'الإطار' : 'Framework',
+                        control: M.UI.Input({
+                            attrs: {
+                                id: `impl-fw-${impl.uid}`,
+                                list: 'framework-options',
+                                value: impl.framework,
+                                'data-impl-uid': impl.uid,
+                                'data-field': 'framework',
+                                gkey: 'impl-field'
+                            }
+                        })
+                    }),
+                    M.UI.Button({
+                        attrs: { gkey: 'remove-framework-btn', 'data-impl-uid': impl.uid },
+                        variant: 'ghost',
+                        size: 'sm'
+                    }, ['🗑️'])
+                ]),
+
+                M.UI.Field({
+                    id: `impl-wiki-${impl.uid}`,
+                    label: db.env.lang === 'ar' ? 'معرّف الويكي (اختياري)' : 'Wiki ID (optional)',
+                    control: M.UI.Input({
+                        attrs: {
+                            id: `impl-wiki-${impl.uid}`,
+                            list: 'wiki-id-options',
+                            placeholder: 'wiki-article-id',
+                            value: impl.wikiId || '',
+                            'data-impl-uid': impl.uid,
+                            'data-field': 'wikiId',
+                            gkey: 'impl-field'
+                        }
+                    })
+                }),
+
+                M.UI.Field({
+                    id: `impl-code-${impl.uid}`,
+                    label: label || (db.env.lang === 'ar' ? 'الكود' : 'Code'),
+                    control: M.UI.Textarea({
+                        attrs: {
+                            id: `impl-code-${impl.uid}`,
+                            rows: 6,
+                            class: 'font-mono text-xs',
+                            style: 'min-height: 220px;',
+                            value: impl.code || codeVal(impl.framework)
+                        }
+                    })
+                })
+            ]);
+        });
+
+        const frameworkOptionsList = D.Containers.RawHtml({
+            html: `<datalist id="framework-options">${frameworksOptions.map(fw => {
+                const label = FRAMEWORKS[fw]?.name?.[db.env.lang] || fw;
+                return `<option value="${fw}">${label}</option>`;
+            }).join('')}</datalist>`
+        });
+
+        const wikiOptionsList = D.Containers.RawHtml({
+            html: `<datalist id="wiki-id-options">${wikiOptions.map(id => `<option value="${id}"></option>`).join('')}</datalist>`
         });
 
         const formContent = D.Containers.Div({ attrs: { class: 'space-y-4' } }, [
@@ -1257,16 +1473,30 @@ function startApp() {
             D.Containers.Div({ attrs: { class: 'grid grid-cols-2 gap-4' } }, [
                 M.UI.Field({ id: 'desc-ar', label: 'الوصف (AR)', control: M.UI.Input({ attrs: { id: 'desc-ar', value: val('description', 'ar') } }) }),
                 M.UI.Field({ id: 'desc-en', label: 'Description (EN)', control: M.UI.Input({ attrs: { id: 'desc-en', value: val('description', 'en') } }) }),
-            ])
-            ,
-            D.Containers.Div({ attrs: { class: 'grid grid-cols-3 gap-2 items-end' } }, [
-                M.UI.Field({ id: 'framework-select', label: db.env.lang === 'ar' ? 'إطار العمل' : 'Framework', control: M.UI.Input({ attrs: { id: 'framework-select', placeholder: suggested || 'react, vue, angular...' } }) }),
-                D.Text.P({ attrs: { class: 'text-xs text-muted col-span-2' } }, [db.env.lang === 'ar' ? 'أضف أي إطار مشهور ثم أدخل كوده بالأسفل.' : 'Add any popular framework then paste its code below.'])
             ]),
-            D.Containers.Div({ attrs: { class: 'flex justify-end' } }, [
-                M.UI.Button({ attrs: { gkey: 'add-framework-btn' }, variant: 'outline', size: 'sm' }, [db.env.lang === 'ar' ? 'إضافة إطار' : 'Add Framework'])
+
+            // Example Wiki
+            M.UI.Field({
+                id: 'example-wiki-id',
+                label: db.env.lang === 'ar' ? 'معرّف ويكي المثال' : 'Example Wiki ID',
+                control: M.UI.Input({
+                    attrs: {
+                        id: 'example-wiki-id',
+                        list: 'wiki-id-options',
+                        placeholder: db.env.lang === 'ar' ? 'اربط المقالة هنا' : 'Link a wiki article',
+                        value: db.modalExampleWiki || ''
+                    }
+                })
+            }),
+
+            // Framework sections
+            frameworkOptionsList,
+            wikiOptionsList,
+            D.Containers.Div({ attrs: { class: 'flex justify-between items-center' } }, [
+                D.Text.P({ attrs: { class: 'text-sm opacity-75' } }, [db.env.lang === 'ar' ? 'أضف إطاراً جديداً أو عدّل القوائم الحالية. يمكنك حذف أي قسم.' : 'Add or edit framework sections. Remove what you do not need.']),
+                M.UI.Button({ attrs: { gkey: 'add-framework-btn' }, variant: 'outline', size: 'sm' }, [db.env.lang === 'ar' ? 'إضافة قسم' : 'Add Section'])
             ]),
-            D.Containers.Div({ attrs: { class: 'grid grid-cols-2 gap-4' } }, frameworkFields)
+            D.Containers.Div({ attrs: { class: 'space-y-3' } }, frameworkFields)
         ]);
 
         return M.UI.Modal({
