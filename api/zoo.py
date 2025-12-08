@@ -192,14 +192,74 @@ async def get_stats():
 # DOWNLOAD & LOAD ENDPOINTS
 # ============================================================================
 
+@router.get("/zoo/download/{model_id}/progress")
+async def stream_download_progress(model_id: str):
+    """
+    Stream download progress via Server-Sent Events (SSE).
+    
+    Frontend should connect to this before starting download.
+    """
+    from sse_starlette.sse import EventSourceResponse
+    from dna.download_manager import get_download_manager
+    import asyncio
+    
+    async def event_generator():
+        download_manager = get_download_manager()
+        
+        # Send initial event
+        yield {
+            "event": "start",
+            "data": json.dumps({"model_id": model_id, "status": "starting"})
+        }
+        
+        # Monitor progress
+        last_progress = 0
+        while True:
+            # Check if download exists in progress
+            if model_id in download_manager._downloads:
+                progress = download_manager._downloads[model_id]
+                
+                # Send progress update if changed
+                if progress.percent != last_progress:
+                    yield {
+                        "event": "progress",
+                        "data": json.dumps({
+                            "model_id": model_id,
+                            "percent": progress.percent,
+                            "downloaded_mb": progress.downloaded_mb,
+                            "total_mb": progress.total_mb,
+                            "speed_mbps": progress.speed_mbps,
+                            "eta_seconds": progress.eta_seconds,
+                            "status": progress.status
+                        })
+                    }
+                    last_progress = progress.percent
+                
+                # Check if completed
+                if progress.status in ["completed", "failed"]:
+                    yield {
+                        "event": "complete",
+                        "data": json.dumps({
+                            "model_id": model_id,
+                            "status": progress.status
+                        })
+                    }
+                    break
+            
+            await asyncio.sleep(0.5)  # Poll every 500ms
+    
+    return EventSourceResponse(event_generator())
+
+
 @router.post("/zoo/download")
 async def download_model(request: DownloadRequest, background_tasks: BackgroundTasks):
     """
-    Download a model from HuggingFace (async background task).
+    Start model download (async background task).
     
-    Returns immediately. Poll GET /zoo/models/{model_id} to check status.
+    Use GET /zoo/download/{model_id}/progress to monitor progress via SSE.
     """
     from dna.model_zoo import get_model
+    from dna.download_manager import get_download_manager
     import logging
     
     logger = logging.getLogger(__name__)
@@ -223,11 +283,17 @@ async def download_model(request: DownloadRequest, background_tasks: BackgroundT
     from dna.model_runner import ModelStatus
     runner._status[request.model_id] = ModelStatus.DOWNLOADING
     
-    # Download in background
+    # Download in background with progress tracking
     def do_download():
         try:
-            logger.info(f"Starting background download for {model.name}...")
-            success = runner.download(request.model_id, force=request.force)
+            logger.info(f"Starting download for {model.name} with progress tracking...")
+            download_manager = get_download_manager()
+            
+            # Download with progress callback
+            success = download_manager.download_model(
+                model_id=request.model_id,
+                hf_name=model.hf_name
+            )
             if success:
                 logger.info(f"Successfully downloaded {model.name}")
             else:

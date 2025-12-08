@@ -15,7 +15,7 @@ import sys
 # Add src to python path to allow importing dna package
 sys.path.append("src")
 
-from api import models, experiments, patterns, zoo, auth, admin
+from api import models, experiments, patterns, zoo, auth, admin, system, weights
 from database.db import init_database
 
 # Create FastAPI app
@@ -56,9 +56,9 @@ app.include_router(models.router, prefix="/api", tags=["models"])
 app.include_router(experiments.router, prefix="/api", tags=["experiments"])
 app.include_router(patterns.router, prefix="/api", tags=["patterns"])
 
-# System monitoring
-from api import system
+# System monitoring & Weight Visualization
 app.include_router(system.router, prefix="/api", tags=["🖥️ System Monitor"])
+app.include_router(weights.router, prefix="/api", tags=["🎨 Weight Visualization"])
 
 
 
