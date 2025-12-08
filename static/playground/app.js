@@ -78,6 +78,7 @@ function startApp() {
         // Wiki Data
         wikiArticles: window.codewikidb || [],
         activeWikiId: (window.codewikidb && window.codewikidb[0]?.id) || null,
+        wikiPicker: { open: false, targetType: null, targetId: null, search: '' },
 
         // Persistence State
         examples: [...EXAMPLES], // Start with static, merge dynamic later
@@ -450,6 +451,64 @@ function startApp() {
             handler: (e, ctx) => {
                 const value = (e.target.value || '').trim();
                 ctx.setState(s => ({ ...s, activeWikiId: value || s.activeWikiId }));
+            }
+        },
+        'wiki.picker.open': {
+            on: ['click'],
+            gkeys: ['open-wiki-picker'],
+            handler: (e, ctx) => {
+                const targetType = e.target?.dataset?.targetType;
+                const targetId = e.target?.dataset?.targetId || null;
+                ctx.setState(s => ({
+                    ...s,
+                    wikiPicker: {
+                        open: true,
+                        targetType,
+                        targetId,
+                        search: ''
+                    }
+                }));
+            }
+        },
+        'wiki.picker.close': {
+            on: ['click'],
+            gkeys: ['close-wiki-picker'],
+            handler: (e, ctx) => ctx.setState(s => ({
+                ...s,
+                wikiPicker: { open: false, targetType: null, targetId: null, search: '' }
+            })))
+        },
+        'wiki.picker.search': {
+            on: ['input'],
+            gkeys: ['wiki-picker-search'],
+            handler: (e, ctx) => ctx.setState(s => ({
+                ...s,
+                wikiPicker: { ...s.wikiPicker, search: e.target.value }
+            })))
+        },
+        'wiki.picker.select': {
+            on: ['click'],
+            gkeys: ['wiki-picker-select'],
+            handler: (e, ctx) => {
+                const id = e.target?.closest('[data-article-id]')?.dataset?.articleId;
+                if (!id) return;
+                const state = ctx.getState();
+                const picker = state.wikiPicker || {};
+
+                ctx.setState(s => {
+                    const nextState = { ...s };
+                    if (picker.targetType === 'example') {
+                        nextState.modalExampleWiki = id;
+                    } else if (picker.targetType === 'impl') {
+                        nextState.modalImplementations = s.modalImplementations.map(impl =>
+                            impl.uid === picker.targetId ? { ...impl, wikiId: id } : impl
+                        );
+                    } else if (picker.targetType === 'full') {
+                        nextState.activeWikiId = id;
+                    }
+                    nextState.wikiPicker = { open: false, targetType: null, targetId: null, search: '' };
+                    return nextState;
+                });
             }
         },
         'app.init': {
@@ -1345,15 +1404,25 @@ function startApp() {
                     M.UI.Field({
                         id: 'full-wiki-id',
                         label: db.env.lang === 'ar' ? 'مقالة الويكي' : 'Wiki Article',
-                        control: M.UI.Input({
-                            attrs: {
-                                id: 'full-wiki-id',
-                                list: 'full-wiki-options',
-                                value: fullWikiId || '',
-                                placeholder: db.env.lang === 'ar' ? 'اختر مقالة' : 'Choose an article',
-                                gkey: 'full-wiki-select'
-                            }
-                        })
+                        control: D.Containers.Div({ attrs: { class: 'flex items-center gap-2' } }, [
+                            M.UI.Input({
+                                attrs: {
+                                    id: 'full-wiki-id',
+                                    list: 'full-wiki-options',
+                                    value: fullWikiId || '',
+                                    placeholder: db.env.lang === 'ar' ? 'اختر مقالة' : 'Choose an article',
+                                    gkey: 'full-wiki-select'
+                                }
+                            }),
+                            M.UI.Button({
+                                attrs: {
+                                    gkey: 'open-wiki-picker',
+                                    'data-target-type': 'full'
+                                },
+                                size: 'icon',
+                                variant: 'ghost'
+                            }, ['🌳'])
+                        ])
                     }),
                     renderWikiArticle(db, fullWikiId, { hideHeading: false })
                 ])
@@ -1422,17 +1491,28 @@ function startApp() {
                 M.UI.Field({
                     id: `impl-wiki-${impl.uid}`,
                     label: db.env.lang === 'ar' ? 'معرّف الويكي (اختياري)' : 'Wiki ID (optional)',
-                    control: M.UI.Input({
-                        attrs: {
-                            id: `impl-wiki-${impl.uid}`,
-                            list: 'wiki-id-options',
-                            placeholder: 'wiki-article-id',
-                            value: impl.wikiId || '',
-                            'data-impl-uid': impl.uid,
-                            'data-field': 'wikiId',
-                            gkey: 'impl-field'
-                        }
-                    })
+                    control: D.Containers.Div({ attrs: { class: 'flex items-center gap-2' } }, [
+                        M.UI.Input({
+                            attrs: {
+                                id: `impl-wiki-${impl.uid}`,
+                                list: 'wiki-id-options',
+                                placeholder: 'wiki-article-id',
+                                value: impl.wikiId || '',
+                                'data-impl-uid': impl.uid,
+                                'data-field': 'wikiId',
+                                gkey: 'impl-field'
+                            }
+                        }),
+                        M.UI.Button({
+                            attrs: {
+                                gkey: 'open-wiki-picker',
+                                'data-target-type': 'impl',
+                                'data-target-id': impl.uid
+                            },
+                            size: 'icon',
+                            variant: 'ghost'
+                        }, ['📚'])
+                    ])
                 }),
 
                 M.UI.Field({
@@ -1479,14 +1559,24 @@ function startApp() {
             M.UI.Field({
                 id: 'example-wiki-id',
                 label: db.env.lang === 'ar' ? 'معرّف ويكي المثال' : 'Example Wiki ID',
-                control: M.UI.Input({
-                    attrs: {
-                        id: 'example-wiki-id',
-                        list: 'wiki-id-options',
-                        placeholder: db.env.lang === 'ar' ? 'اربط المقالة هنا' : 'Link a wiki article',
-                        value: db.modalExampleWiki || ''
-                    }
-                })
+                control: D.Containers.Div({ attrs: { class: 'flex items-center gap-2' } }, [
+                    M.UI.Input({
+                        attrs: {
+                            id: 'example-wiki-id',
+                            list: 'wiki-id-options',
+                            placeholder: db.env.lang === 'ar' ? 'اربط المقالة هنا' : 'Link a wiki article',
+                            value: db.modalExampleWiki || ''
+                        }
+                    }),
+                    M.UI.Button({
+                        attrs: {
+                            gkey: 'open-wiki-picker',
+                            'data-target-type': 'example'
+                        },
+                        size: 'icon',
+                        variant: 'ghost'
+                    }, ['📚'])
+                ])
             }),
 
             // Framework sections
@@ -1509,6 +1599,92 @@ function startApp() {
                 M.UI.Button({ attrs: { gkey: 'ui:modal:close' }, variant: 'ghost' }, [t('cancel', db)]),
                 M.UI.Button({ attrs: { gkey: 'save-example-btn' }, variant: 'solid' }, [t('save', db)])
             ]
+        });
+    }
+
+    function WikiPickerModal(db) {
+        const picker = db.wikiPicker || {};
+        if (!picker.open) return null;
+
+        const lang = db.env.lang;
+        const search = (picker.search || '').toLowerCase();
+        const articles = db.wikiArticles || [];
+
+        const buildTree = (items) => {
+            const map = {};
+            const roots = [];
+            items.forEach(item => { map[item.id] = { ...item, children: [] }; });
+            items.forEach(item => {
+                const node = map[item.id];
+                const parentId = Array.isArray(item.parents_ids) && item.parents_ids.length
+                    ? item.parents_ids[item.parents_ids.length - 1]
+                    : null;
+                if (parentId && map[parentId]) {
+                    map[parentId].children.push(node);
+                } else {
+                    roots.push(node);
+                }
+            });
+            return roots;
+        };
+
+        const filtered = search
+            ? articles.filter(a => {
+                const title = (a.title?.[lang] || a.title?.en || '').toLowerCase();
+                const kw = (a.keywords || []).join(' ').toLowerCase();
+                return title.includes(search) || kw.includes(search) || a.id.toLowerCase().includes(search);
+            })
+            : null;
+
+        const renderTree = (nodes, depth = 0) => nodes
+            .sort((a, b) => (a.sort || 999) - (b.sort || 999))
+            .map(node => {
+                const hasChildren = node.children && node.children.length;
+                return D.Containers.Div({ attrs: { class: 'space-y-1', style: `margin-inline-start:${depth * 1}rem` } }, [
+                    D.Containers.Div({
+                        attrs: {
+                            class: 'flex items-center gap-2 px-2 py-1 rounded-md hover:bg-[var(--accent)] cursor-pointer',
+                            'data-article-id': node.id,
+                            gkey: 'wiki-picker-select'
+                        }
+                    }, [
+                        D.Text.Span({ attrs: { class: 'opacity-60 text-sm' } }, [hasChildren ? '📂' : '📄']),
+                        D.Text.Span({ attrs: { class: 'text-sm font-medium' } }, [node.title?.[lang] || node.title?.en || node.id])
+                    ]),
+                    hasChildren ? D.Containers.Div({}, renderTree(node.children, depth + 1)) : null
+                ]);
+            });
+
+        const tree = renderTree(buildTree(articles));
+
+        return M.UI.Modal({
+            open: true,
+            title: lang === 'ar' ? 'اختيار مقالة ويكي' : 'Pick a wiki article',
+            size: 'lg',
+            content: D.Containers.Div({ attrs: { class: 'space-y-3' } }, [
+                D.Containers.Div({ attrs: { class: 'flex items-center gap-2' } }, [
+                    M.UI.Input({
+                        attrs: {
+                            placeholder: lang === 'ar' ? 'ابحث بعنوان أو كلمة مفتاحية' : 'Search by title or keyword',
+                            value: picker.search || '',
+                            gkey: 'wiki-picker-search'
+                        }
+                    }),
+                    M.UI.Button({ attrs: { gkey: 'close-wiki-picker' }, variant: 'ghost', size: 'sm' }, [lang === 'ar' ? 'إغلاق' : 'Close'])
+                ]),
+                D.Containers.Div({ attrs: { class: 'max-h-[60vh] overflow-y-auto rounded border p-3', style: 'border-color: var(--border); background: var(--card);' } }, [
+                    filtered ? filtered.map(item => D.Containers.Div({
+                        attrs: {
+                            class: 'px-2 py-1 rounded hover:bg-[var(--accent)] cursor-pointer flex items-center gap-2',
+                            'data-article-id': item.id,
+                            gkey: 'wiki-picker-select'
+                        }
+                    }, [
+                        D.Text.Span({ attrs: { class: 'opacity-60 text-sm' } }, ['🔍']),
+                        D.Text.Span({ attrs: { class: 'text-sm font-medium' } }, [item.title?.[lang] || item.title?.en || item.id])
+                    ])) : tree
+                ])
+            ])
         });
     }
     function HistoryModal(db) {
@@ -1585,11 +1761,11 @@ function startApp() {
                 attrs: { class: 'flex-1 flex flex-col min-w-0' }
             }, [
                 Toolbar(db),
-                D.Containers.Div({
-                    attrs: { class: 'flex-1 flex overflow-hidden' }
-                }, isWiki ? [
-                    M.UI.WikiViewer({
-                        db: db,
+            D.Containers.Div({
+                attrs: { class: 'flex-1 flex overflow-hidden' }
+            }, isWiki ? [
+                M.UI.WikiViewer({
+                    db: db,
                         wikiId: db.activeWikiId,
                         onNavigate: (id) => window.Mishkah.app.setState(s => ({ ...s, activeWikiId: id }))
                     })
@@ -1599,7 +1775,9 @@ function startApp() {
                 ])
             ]),
             // Overlays
-            ExampleModal(db)
+            ExampleModal(db),
+            HistoryModal(db),
+            WikiPickerModal(db)
         ]);
     }
 
