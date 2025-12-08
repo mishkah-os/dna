@@ -476,7 +476,7 @@ function startApp() {
             handler: (e, ctx) => ctx.setState(s => ({
                 ...s,
                 wikiPicker: { open: false, targetType: null, targetId: null, search: '' }
-            })))
+            }))
         },
         'wiki.picker.search': {
             on: ['input'],
@@ -484,7 +484,7 @@ function startApp() {
             handler: (e, ctx) => ctx.setState(s => ({
                 ...s,
                 wikiPicker: { ...s.wikiPicker, search: e.target.value }
-            })))
+            }))
         },
         'wiki.picker.select': {
             on: ['click'],
@@ -1761,11 +1761,11 @@ function startApp() {
                 attrs: { class: 'flex-1 flex flex-col min-w-0' }
             }, [
                 Toolbar(db),
-            D.Containers.Div({
-                attrs: { class: 'flex-1 flex overflow-hidden' }
-            }, isWiki ? [
-                M.UI.WikiViewer({
-                    db: db,
+                D.Containers.Div({
+                    attrs: { class: 'flex-1 flex overflow-hidden' }
+                }, isWiki ? [
+                    M.UI.WikiViewer({
+                        db: db,
                         wikiId: db.activeWikiId,
                         onNavigate: (id) => window.Mishkah.app.setState(s => ({ ...s, activeWikiId: id }))
                     })

@@ -383,6 +383,8 @@ class TinyModelRunner:
                 top_p=top_p,
                 do_sample=do_sample,
                 pad_token_id=pipe.tokenizer.eos_token_id,
+                repetition_penalty=1.2,  # Penalize repetition
+                no_repeat_ngram_size=3,  # Prevent repeating 3-grams
             )
             
             generated_text = result[0]["generated_text"]

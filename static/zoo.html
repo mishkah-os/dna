@@ -710,7 +710,7 @@
                             <span class="size-label">params</span>
                         </div>
                         <div class="model-actions">
-                            ${model.status === 'ready' ?
+                            ${model.status === 'ready' || model.status === 'downloaded' ?
                     `<button class="btn btn-primary" onclick="tryModel('${model.id}')">جرّب</button>` :
                     model.status === 'not_downloaded' ?
                         `<button class="btn btn-primary" onclick="downloadModel('${model.id}')">⬇️ تحميل</button>` :
@@ -725,7 +725,7 @@
         // Download model
         async function downloadModel(modelId) {
             try {
-                // Update UI immediately
+                // Update UI to show downloading
                 updateModelStatus(modelId, 'downloading');
 
                 const response = await fetch(`${API_BASE}/zoo/download`, {
@@ -734,11 +734,22 @@
                     body: JSON.stringify({ model_id: modelId })
                 });
 
-                // Poll for status
-                pollModelStatus(modelId);
+                const result = await response.json();
+
+                if (response.ok) {
+                    // Start polling for status updates
+                    console.log(`Download started: ${result.message}`);
+                    pollModelStatus(modelId);
+                } else {
+                    // Error occurred
+                    updateModelStatus(modelId, 'error');
+                    console.error(`Download failed: ${result.detail || result.message}`);
+                    alert(`فشل التحميل: ${result.detail || result.message}`);
+                }
             } catch (error) {
                 console.error('Download failed:', error);
                 updateModelStatus(modelId, 'error');
+                alert(`خطأ في التحميل: ${error.message}`);
             }
         }
 
@@ -751,13 +762,17 @@
 
                     updateModelStatus(modelId, model.status);
 
+                    // Keep polling if still downloading or loading
                     if (model.status === 'downloading' || model.status === 'loading') {
-                        setTimeout(poll, 1000);
+                        setTimeout(poll, 2000); // Poll every 2 seconds
                     } else {
+                        // Complete
                         updateLoadedStats();
+                        console.log(`${modelId} status: ${model.status}`);
                     }
                 } catch (error) {
-                    console.error('Status poll failed:', error);
+                    console.error('Poll failed:', error);
+                    setTimeout(poll, 3000); // Retry on error
                 }
             };
             poll();
@@ -799,6 +814,32 @@
             }
 
             if (!model) return;
+
+            // If model is downloaded but not loaded in memory, load it first
+            if (model.status === 'downloaded') {
+                try {
+                    updateModelStatus(modelId, 'loading');
+
+                    const response = await fetch(`${API_BASE}/zoo/load/${modelId}`, {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        updateModelStatus(modelId, result.status);
+                        model.status = result.status;
+                    } else {
+                        alert('فشل تحميل النموذج للذاكرة');
+                        updateModelStatus(modelId, 'downloaded');
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Failed to load model:', error);
+                    alert(`خطأ: ${error.message}`);
+                    updateModelStatus(modelId, 'downloaded');
+                    return;
+                }
+            }
 
             currentModel = model;
             document.getElementById('modal-model-name').textContent = model.name;

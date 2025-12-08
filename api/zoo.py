@@ -195,12 +195,14 @@ async def get_stats():
 @router.post("/zoo/download")
 async def download_model(request: DownloadRequest, background_tasks: BackgroundTasks):
     """
-    Download a model from HuggingFace (runs in background).
+    Download a model from HuggingFace (async background task).
     
-    Returns immediately with status 'downloading'.
-    Poll GET /zoo/models/{model_id} to check status.
+    Returns immediately. Poll GET /zoo/models/{model_id} to check status.
     """
     from dna.model_zoo import get_model
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     model = get_model(request.model_id)
     if not model:
@@ -208,14 +210,35 @@ async def download_model(request: DownloadRequest, background_tasks: BackgroundT
     
     runner = _get_runner()
     
-    # Run download in background
+    # Check if already downloaded
+    current_status = runner.get_status(request.model_id).value
+    if current_status in ["downloaded", "ready"] and not request.force:
+        return {
+            "message": f"{model.name} already downloaded",
+            "model_id": request.model_id,
+            "status": current_status,
+        }
+    
+    # Set status to downloading immediately
+    from dna.model_runner import ModelStatus
+    runner._status[request.model_id] = ModelStatus.DOWNLOADING
+    
+    # Download in background
     def do_download():
-        runner.download(request.model_id, force=request.force)
+        try:
+            logger.info(f"Starting background download for {model.name}...")
+            success = runner.download(request.model_id, force=request.force)
+            if success:
+                logger.info(f"Successfully downloaded {model.name}")
+            else:
+                logger.error(f"Failed to download {model.name}")
+        except Exception as e:
+            logger.error(f"Error downloading {model.name}: {e}")
     
     background_tasks.add_task(do_download)
     
     return {
-        "message": f"Downloading {model.name}...",
+        "message": f"Downloading {model.name}... Poll /api/zoo/models/{request.model_id} for status",
         "model_id": request.model_id,
         "status": "downloading",
     }

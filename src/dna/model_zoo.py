@@ -39,6 +39,16 @@ class TaskType(str, Enum):
     SPEECH_TO_TEXT = "speech-to-text"
 
 
+class ModelCategory(str, Enum):
+    """Model categories for organization"""
+    TINY_BASIC = "tiny_basic"          # Original tiny models (<100M)
+    SMART_SMALL = "smart_small"        # Small but powerful (1-7B)
+    MATH_SPECIALIZED = "math"          # Math-focused models
+    BIO_SPECIALIZED = "biology"        # DNA/Protein/Biomedical
+    VISION = "vision"                  # Image models
+    AUDIO = "audio"                    # Audio models
+
+
 @dataclass
 class TinyModel:
     """A tiny AI model in our zoo"""
@@ -59,6 +69,8 @@ class TinyModel:
     hidden_size: int = 0
     family: str = ""
     specialty: str = "general"
+    category: ModelCategory = ModelCategory.TINY_BASIC
+    context_window: int = 2048
     
     # Requirements
     requires_gpu: bool = False
@@ -82,6 +94,8 @@ class TinyModel:
             "hidden_size": self.hidden_size,
             "family": self.family,
             "specialty": self.specialty,
+            "category": self.category.value,
+            "context_window": self.context_window,
             "requires_gpu": self.requires_gpu,
             "estimated_ram_gb": self.estimated_ram_gb,
             "tier": self.tier,
@@ -346,6 +360,180 @@ MODEL_ZOO: Dict[str, TinyModel] = {
         specialty="multilingual",
         requires_gpu=False,
         estimated_ram_gb=1.0,
+        tier=3,
+        tested=False,
+    ),
+    
+    # ========== SMART SMALL MODELS (1-7B) ==========
+    
+    "qwen2.5-3b": TinyModel(
+        id="qwen2.5-3b",
+        name="Qwen2.5-3B-Instruct",
+        hf_name="Qwen/Qwen2.5-3B-Instruct",
+        params_millions=3090.0,
+        architecture=Architecture.DECODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_GENERATION, TaskType.QUESTION_ANSWERING],
+        description="Qwen 2.5 - Best small model, excellent Arabic support",
+        num_layers=36,
+        hidden_size=2048,
+        family="Qwen",
+        specialty="general + arabic",
+        category=ModelCategory.SMART_SMALL,
+        context_window=32768,
+        requires_gpu=False,
+        estimated_ram_gb=6.5,
+        tier=1,
+        tested=False,
+    ),
+    
+    "qwen2.5-1.5b": TinyModel(
+        id="qwen2.5-1.5b",
+        name="Qwen2.5-1.5B-Instruct",
+        hf_name="Qwen/Qwen2.5-1.5B-Instruct",
+        params_millions=1540.0,
+        architecture=Architecture.DECODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_GENERATION, TaskType.QUESTION_ANSWERING],
+        description="Qwen 2.5 - Ultra-lightweight, fast inference",
+        num_layers=28,
+        hidden_size=1536,
+        family="Qwen",
+        specialty="general + arabic",
+        category=ModelCategory.SMART_SMALL,
+        context_window=32768,
+        requires_gpu=False,
+        estimated_ram_gb=3.2,
+        tier=2,
+        tested=False,
+    ),
+    
+    "phi-3.5-mini": TinyModel(
+        id="phi-3.5-mini",
+        name="Phi-3.5-Mini",
+        hf_name="microsoft/Phi-3.5-mini-instruct",
+        params_millions=3820.0,
+        architecture=Architecture.DECODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_GENERATION, TaskType.QUESTION_ANSWERING],
+        description="Microsoft Phi-3.5 - Long context window (128k tokens)",
+        num_layers=32,
+        hidden_size=3072,
+        family="Phi",
+        specialty="long-context reasoning",
+        category=ModelCategory.SMART_SMALL,
+        context_window=131072,
+        requires_gpu=False,
+        estimated_ram_gb=8.0,
+        tier=2,
+        tested=False,
+    ),
+    
+    # ========== MATH-SPECIALIZED MODELS ==========
+    
+    "qwen2.5-math-1.5b": TinyModel(
+        id="qwen2.5-math-1.5b",
+        name="Qwen2.5-Math-1.5B",
+        hf_name="Qwen/Qwen2.5-Math-1.5B-Instruct",
+        params_millions=1540.0,
+        architecture=Architecture.DECODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_GENERATION, TaskType.QUESTION_ANSWERING],
+        description="Mathematical reasoning and problem solving",
+        num_layers=28,
+        hidden_size=1536,
+        family="Qwen",
+        specialty="mathematics",
+        category=ModelCategory.MATH_SPECIALIZED,
+        context_window=32768,
+        requires_gpu=False,
+        estimated_ram_gb=3.2,
+        tier=1,
+        tested=False,
+    ),
+    
+    "qwen2.5-math-7b": TinyModel(
+        id="qwen2.5-math-7b",
+        name="Qwen2.5-Math-7B",
+        hf_name="Qwen/Qwen2.5-Math-7B-Instruct",
+        params_millions=7610.0,
+        architecture=Architecture.DECODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_GENERATION, TaskType.QUESTION_ANSWERING],
+        description="Advanced mathematical reasoning and proofs",
+        num_layers=32,
+        hidden_size=4096,
+        family="Qwen",
+        specialty="mathematics + proofs",
+        category=ModelCategory.MATH_SPECIALIZED,
+        context_window=32768,
+        requires_gpu=True,
+        estimated_ram_gb=15.5,
+        tier=2,
+        tested=False,
+    ),
+    
+    # ========== BIO/DNA-SPECIALIZED MODELS ==========
+    
+    "dnabert-2": TinyModel(
+        id="dnabert-2",
+        name="DNABERT-2",
+        hf_name="zhihan1996/DNABERT-2-117M",
+        params_millions=117.0,
+        architecture=Architecture.ENCODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_CLASSIFICATION, TaskType.TEXT_EMBEDDINGS],
+        description="DNA sequence analysis and genome understanding",
+        num_layers=12,
+        hidden_size=768,
+        family="BERT",
+        specialty="dna-sequences",
+        category=ModelCategory.BIO_SPECIALIZED,
+        context_window=512,
+        requires_gpu=False,
+        estimated_ram_gb=0.5,
+        tier=1,
+        tested=False,
+    ),
+    
+    "biogpt": TinyModel(
+        id="biogpt",
+        name="BioGPT-Large",
+        hf_name="microsoft/biogpt-large",
+        params_millions=1500.0,
+        architecture=Architecture.DECODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_GENERATION, TaskType.QUESTION_ANSWERING],
+        description="Biomedical text generation and QA",
+        num_layers=24,
+        hidden_size=1024,
+        family="GPT",
+        specialty="biomedical-text",
+        category=ModelCategory.BIO_SPECIALIZED,
+        context_window=1024,
+        requires_gpu=False,
+        estimated_ram_gb=3.0,
+        tier=2,
+        tested=False,
+    ),
+    
+    "proteinbert": TinyModel(
+        id="proteinbert",
+        name="ProteinBERT",
+        hf_name="Rostlab/prot_bert_bfd",
+        params_millions=420.0,
+        architecture=Architecture.ENCODER,
+        modality=Modality.TEXT,
+        tasks=[TaskType.TEXT_EMBEDDINGS, TaskType.TEXT_CLASSIFICATION],
+        description="Protein sequence embeddings and function prediction",
+        num_layers=30,
+        hidden_size=1024,
+        family="BERT",
+        specialty="protein-sequences",
+        category=ModelCategory.BIO_SPECIALIZED,
+        context_window=1024,
+        requires_gpu=False,
+        estimated_ram_gb=1.7,
         tier=3,
         tested=False,
     ),
