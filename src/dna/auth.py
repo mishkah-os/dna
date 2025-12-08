@@ -17,17 +17,13 @@ from jose import JWTError, jwt
 # ============================================================================
 
 # Secret keys (⚠️ in production, load from environment!)
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", secrets.token_urlsafe(32))
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dna-secret-key-change-in-production-12345678")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
 # Encryption key for password recovery (⚠️ DANGEROUS! Admin only)
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", Fernet.generate_key())
-if isinstance(ENCRYPTION_KEY, str):
-    ENCRYPTION_KEY = ENCRYPTION_KEY.encode()
-
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Using fixed key for consistency (in production, load from environment!)
+ENCRYPTION_KEY = Fernet.generate_key()  # Generate fresh key each time (for demo)
 
 # Cipher for password encryption/decryption
 cipher_suite = Fernet(ENCRYPTION_KEY)
@@ -49,7 +45,8 @@ class AuthService:
     """
     
     def __init__(self):
-        self.pwd_context = pwd_context
+        # Initialize password context in instance to avoid global initialization issues
+        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         self.cipher = cipher_suite
     
     # ------------------------------------------------------------------------

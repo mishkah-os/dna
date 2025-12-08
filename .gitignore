@@ -9,4 +9,4 @@ __pycache__/
 database/__pycache__/*
 **/__pycache__/*
 /src/dna/__pycache__
-*.pyc
+/src/dna/__pycache__/*
