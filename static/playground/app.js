@@ -64,7 +64,7 @@ function startApp() {
         code: '', // Will be loaded async
         previewSrc: '',
         showReadme: false,
-        activePreviewTab: 'result', // 'result' | 'code-wiki' | 'example-wiki'
+        activePreviewTab: 'execute', // 'execute' | 'code-wiki' | 'example-info' | 'full-wiki'
         showHistoryModal: false,
         codeHistory: [],
         // Modal State
@@ -74,6 +74,10 @@ function startApp() {
         modalFrameworks: [],
         modalImplementations: [],
         modalExampleWiki: '',
+
+        // Wiki Data
+        wikiArticles: window.codewikidb || [],
+        activeWikiId: (window.codewikidb && window.codewikidb[0]?.id) || null,
 
         // Persistence State
         examples: [...EXAMPLES], // Start with static, merge dynamic later
@@ -137,6 +141,36 @@ function startApp() {
 </html>`;
         }
         return code;
+    }
+
+    function renderWikiArticle(db, wikiId, options = {}) {
+        const articles = db.wikiArticles || window.codewikidb || [];
+        const article = articles.find(a => a.id === wikiId);
+        const lang = db.env.lang;
+
+        if (!wikiId) {
+            return D.Text.P({ attrs: { class: 'p-6 text-center text-sm text-gray-500' } }, [
+                lang === 'ar' ? 'لا يوجد معرف ويكي محدد.' : 'No wiki ID provided.'
+            ]);
+        }
+
+        if (!article) {
+            return D.Text.P({ attrs: { class: 'p-6 text-center text-sm text-red-500' } }, [
+                lang === 'ar' ? 'المقالة غير موجودة في الويكي.' : 'Wiki article not found.'
+            ]);
+        }
+
+        const title = article.title?.[lang] || article.title?.en || wikiId;
+        const content = article.content?.[lang] || article.content?.en || '';
+
+        const markdown = M.UI?.Markdown
+            ? M.UI.Markdown({ content, className: 'prose max-w-none' })
+            : D.Containers.RawHtml({ html: content.replace(/\n/g, '<br>') });
+
+        return D.Containers.Div({ attrs: { class: 'p-6 space-y-4' } }, [
+            options.hideHeading ? null : D.Text.H3({ attrs: { class: 'text-xl font-semibold' } }, [title]),
+            markdown
+        ]);
     }
 
     function getFrameworksForExample(example) {
@@ -410,6 +444,14 @@ function startApp() {
                 ctx.setState(s => ({ ...s, activePreviewTab: tab }));
             }
         },
+        'wiki.full.select': {
+            on: ['input', 'change'],
+            gkeys: ['full-wiki-select'],
+            handler: (e, ctx) => {
+                const value = (e.target.value || '').trim();
+                ctx.setState(s => ({ ...s, activeWikiId: value || s.activeWikiId }));
+            }
+        },
         'app.init': {
             on: ['init'],
             handler: async (e, ctx) => {
@@ -549,7 +591,7 @@ function startApp() {
             on: ['click'],
             gkeys: ['add-example-btn'],
             handler: (e, ctx) => {
-                const defaults = Object.keys(FRAMEWORKS).slice(0, 3);
+                const defaults = Object.keys(FRAMEWORKS).slice(0, 1);
                 const implementations = defaults.map((fw, idx) => ({
                     uid: `impl-new-${idx}-${Date.now()}`,
                     framework: fw,
@@ -729,6 +771,7 @@ function startApp() {
                     examples: allExamples,
                     activeExample: id,
                     activeFramework: nextFramework,
+                    activeWikiId: newExample.wikiId || s.activeWikiId,
                     code: nextCode,
                     previewSrc: generatePreview(nextFramework, nextCode)
                 }));
@@ -823,6 +866,7 @@ function startApp() {
                     activeFramework: nextFramework,
                     code: code,
                     hasUserCode: isUser,
+                    activeWikiId: nextExample?.wikiId || s.activeWikiId,
                     previewSrc: generatePreview(nextFramework, code),
                     showReadme: false
                 }));
@@ -1216,6 +1260,8 @@ function startApp() {
         // Get wiki IDs
         const codeWikiId = implementation?.wikiId || null;
         const exampleWikiId = example?.wikiId || null;
+        const wikiOptions = db.wikiArticles || [];
+        const fullWikiId = db.activeWikiId || exampleWikiId || wikiOptions[0]?.id || null;
 
         return D.Containers.Div({
             attrs: {
@@ -1287,31 +1333,30 @@ function startApp() {
                         sandbox: 'allow-scripts allow-modals allow-same-origin'
                     }
                 })
-            ] : db.activePreviewTab === 'code-wiki' && codeWikiId && M.UI.WikiMini ? [
-                // Code Wiki (WikiMini)
-                M.UI.WikiMini({
-                    wikiId: codeWikiId,
-                    lang: db.env.lang
-                })
-            ] : db.activePreviewTab === 'example-info' && exampleWikiId && M.UI.WikiMini ? [
-                // Example Info (WikiMini)
-                M.UI.WikiMini({
-                    wikiId: exampleWikiId,
-                    lang: db.env.lang
-                })
-            ] : db.activePreviewTab === 'full-wiki' && M.UI.WikiViewer ? [
-                // Full Wiki (WikiViewer)
-                M.UI.WikiViewer({
-                    db: db,
-                    wikiId: db.activeWikiId || exampleWikiId, // Fallback to example wiki if no active wiki
-                    onNavigate: (id) => {
-                        // We need to update state to change the active wiki article
-                        // This requires access to the app instance or a way to dispatch
-                        if (window.MishkahApp) {
-                            window.MishkahApp.setState(s => ({ ...s, activeWikiId: id }));
-                        }
-                    }
-                })
+            ] : db.activePreviewTab === 'code-wiki' ? [
+                renderWikiArticle(db, codeWikiId)
+            ] : db.activePreviewTab === 'example-info' ? [
+                renderWikiArticle(db, exampleWikiId)
+            ] : db.activePreviewTab === 'full-wiki' ? [
+                D.Containers.Div({ attrs: { class: 'p-4 space-y-3' } }, [
+                    D.Containers.RawHtml({
+                        html: `<datalist id="full-wiki-options">${(wikiOptions || []).map(a => `<option value="${a.id}">${a.title?.[db.env.lang] || a.title?.en || a.id}</option>`).join('')}</datalist>`
+                    }),
+                    M.UI.Field({
+                        id: 'full-wiki-id',
+                        label: db.env.lang === 'ar' ? 'مقالة الويكي' : 'Wiki Article',
+                        control: M.UI.Input({
+                            attrs: {
+                                id: 'full-wiki-id',
+                                list: 'full-wiki-options',
+                                value: fullWikiId || '',
+                                placeholder: db.env.lang === 'ar' ? 'اختر مقالة' : 'Choose an article',
+                                gkey: 'full-wiki-select'
+                            }
+                        })
+                    }),
+                    renderWikiArticle(db, fullWikiId, { hideHeading: false })
+                ])
             ] : [
                 D.Text.P({ attrs: { class: 'p-8 text-center' } }, [
                     db.env.lang === 'ar'
@@ -1324,7 +1369,7 @@ function startApp() {
 
     function ExampleModal(db) {
         const isEdit = db.modalMode === 'edit';
-        const example = db.examples.find(ex => ex.id === db.activeExample);
+        const example = isEdit ? db.examples.find(ex => ex.id === db.activeExample) : null;
         const implementations = Array.isArray(db.modalImplementations) && db.modalImplementations.length
             ? db.modalImplementations
             : buildImplementations(example);
