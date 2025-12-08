@@ -662,7 +662,19 @@
         </div>
     </div>
 
+
     <script>
+        // ====== Authentication Check =======
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login.html';
+        }
+        // Add token to all requests
+        const authHeaders = {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+
         const API_BASE = '/api';
         let currentModel = null;
         let catalog = { text: [], vision: [], audio: [], multimodal: [] };

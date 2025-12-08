@@ -15,7 +15,7 @@ import sys
 # Add src to python path to allow importing dna package
 sys.path.append("src")
 
-from api import models, experiments, patterns, zoo
+from api import models, experiments, patterns, zoo, auth, admin
 from database.db import init_database
 
 # Create FastAPI app
@@ -36,7 +36,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate Limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Include API routers
+# Authentication & Authorization
+app.include_router(auth.router, prefix="/api", tags=["🔐 Authentication"])
+app.include_router(admin.router, prefix="/api", tags=["👥 Admin"])
+
+# Core Features
 app.include_router(zoo.router, prefix="/api", tags=["🏪 Tiny AI Zoo"])
 app.include_router(models.router, prefix="/api", tags=["models"])
 app.include_router(experiments.router, prefix="/api", tags=["experiments"])
