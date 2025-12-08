@@ -21,7 +21,7 @@ from database.db import init_database
 # Create FastAPI app
 app = FastAPI(
     title="DNA Pattern Explorer",
-    description="🧬 Neural Network Pattern Mining & 🏪 Tiny AI Play Store",
+    description="DNA Neural Network Pattern Mining & Tiny AI Play Store",
     version="2.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc"
@@ -48,13 +48,13 @@ app.include_router(patterns.router, prefix="/api", tags=["patterns"])
 async def startup_event():
     """Initialize database on startup"""
     await init_database()
-    print("✅ Database initialized")
+    print("[OK] Database initialized")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    print("👋 Shutting down DNA Pattern Explorer")
+    print("[SHUTDOWN] DNA Pattern Explorer")
 
 
 @app.get("/health")
@@ -68,9 +68,13 @@ app.mount("/", StaticFiles(directory=str(static_path), html=True), name="static"
 
 
 if __name__ == "__main__":
-    print("🚀 Starting DNA Pattern Explorer...")
-    print("📍 Dashboard: http://localhost:8058")
-    print("📚 API Docs: http://localhost:8058/api/docs")
+    print("=" * 50)
+    print("Starting DNA Pattern Explorer...")
+    print("=" * 50)
+    print("Dashboard: http://localhost:8058")
+    print("Play Store: http://localhost:8058/zoo.html")
+    print("API Docs: http://localhost:8058/api/docs")
+    print("=" * 50)
     
     uvicorn.run(
         "app:app",
@@ -79,3 +83,4 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
+
