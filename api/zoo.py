@@ -175,10 +175,37 @@ async def list_models(
     return result
 
 
-@router.get("/zoo/models/{model_id}", response_model=ModelInfo)
+@router.get("/zoo/models/{model_id}")
 async def get_model(model_id: str):
-    """Get details for a specific model"""
-    return _get_model_with_status(model_id)
+    """Get details for a specific model with download progress"""
+    from dna.model_zoo import get_model as get_zoo_model
+    from dna.model_runner import get_runner
+    from dna.download_manager import get_download_manager
+    
+    model = get_zoo_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
+    
+    runner = get_runner()
+    status = runner.get_status(model_id).value
+    
+    info = model.to_dict()
+    info["status"] = status
+    
+    # Add download progress if downloading
+    download_manager = get_download_manager()
+    if model_id in download_manager._active_downloads:
+        progress = download_manager._active_downloads[model_id]
+        info["download_progress"] = {
+            "percent": progress.percentage,  # FIXED
+            "downloaded_mb": progress.downloaded_bytes / (1024**2),  # FIXED
+            "total_mb": progress.total_bytes / (1024**2),  # FIXED
+            "speed_mbps": progress.speed_mbps,
+            "eta_seconds": progress.eta_seconds,
+            "status": progress.status
+        }
+    
+    return info
 
 
 @router.get("/zoo/stats")
