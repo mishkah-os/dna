@@ -8,6 +8,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="/static/js/auth.js"></script>
 
     <style>
         * {
@@ -220,44 +221,8 @@
         let allLayers = [];
 
         // Auth
-        const token = localStorage.getItem('token');
-        if (!token) {
-            window.location.href = '/login.html';
-        }
-        const authHeaders = {
-            'Authorization': `Bearer ${token}`
-        };
-
-        function handleUnauthorized(response) {
-            if (response.status === 401) {
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
-                return true;
-            }
-            return false;
-        }
-
-        async function fetchWithAuth(url, options = {}) {
-            const mergedOptions = {
-                ...options,
-                headers: {
-                    ...(options.headers || {}),
-                    ...authHeaders
-                }
-            };
-
-            const response = await fetch(url, mergedOptions);
-
-            if (handleUnauthorized(response)) {
-                throw new Error('Unauthorized');
-            }
-
-            if (!response.ok) {
-                throw new Error(`Request failed with status ${response.status}`);
-            }
-
-            return response;
-        }
+        const authHeaders = auth.buildAuthHeaders(auth.ensureToken());
+        const fetchWithAuth = auth.fetchWithAuth;
 
         function initThreeJS() {
             // Scene

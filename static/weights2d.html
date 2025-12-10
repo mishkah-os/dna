@@ -258,50 +258,15 @@
         </div>
     </div>
 
+    <script src="/static/js/auth.js"></script>
     <script>
-        const token = localStorage.getItem('token');
-        if (!token) {
-            window.location.href = '/login.html';
-        }
-
-        const authHeaders = {
-            'Authorization': `Bearer ${token}`
-        };
-
-        function handleUnauthorized(response) {
-            if (response.status === 401) {
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
-                return true;
-            }
-            return false;
-        }
-
-        async function fetchWithAuth(url, options = {}) {
-            const mergedOptions = {
-                ...options,
-                headers: {
-                    ...(options.headers || {}),
-                    ...authHeaders
-                }
-            };
-
-            const response = await fetch(url, mergedOptions);
-
-            if (handleUnauthorized(response)) {
-                throw new Error('Unauthorized');
-            }
-
-            if (!response.ok) {
-                throw new Error(`Request failed with status ${response.status}`);
-            }
-
-            return response;
-        }
+        const authHeaders = auth.buildAuthHeaders(auth.ensureToken());
+        const fetchWithAuth = auth.fetchWithAuth;
 
         let currentModel = null;
         let currentLayer = null;
         let allLayers = [];
+        let lastFetchedMatrix = null;
 
         const canvas = document.getElementById('heatmap-canvas');
         const ctx = canvas.getContext('2d');
@@ -313,14 +278,28 @@
         }
 
         function colorForValue(v) {
-            // blue -> purple -> red
-            const r = v < 0.5 ? v * 2 * 160 : 160 + (v - 0.5) * 2 * 95;
-            const g = v < 0.5 ? v * 2 * 100 : (1 - (v - 0.5) * 2) * 80;
-            const b = v < 0.5 ? 200 + v * 2 * 55 : (1 - (v - 0.5) * 2) * 120;
+            // A gradient from blue (v=0.0) -> purple (v=0.5) -> red (v=1.0)
+            let r, g, b;
+            if (v < 0.5) {
+                const t = v * 2; // scale to 0-1 range
+                r = t * 160;
+                g = t * 100;
+                b = 200 + t * 55;
+            } else {
+                const t = (v - 0.5) * 2; // scale to 0-1 range
+                r = 160 + t * 95;
+                g = (1 - t) * 80;
+                b = (1 - t) * 120;
+            }
             return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
         }
 
         function drawHeatmap(matrix) {
+            if (!matrix || matrix.length === 0 || matrix[0].length === 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
             resizeCanvas();
             const rows = matrix.length;
             const cols = matrix[0].length;
@@ -380,7 +359,8 @@
                 const response = await fetchWithAuth(`/api/weights/${currentModel}/layer/${layerName}/heatmap?subsample=${subsample}&max_side=${maxSide}`);
                 const data = await response.json();
 
-                drawHeatmap(data.matrix);
+                lastFetchedMatrix = data.matrix;
+                drawHeatmap(lastFetchedMatrix);
                 updateStats(data);
                 updateActiveLayer(layerName);
                 updateMeta(data);
@@ -435,12 +415,12 @@
         }
 
         function syncControls() {
-            document.getElementById('subsample').addEventListener('input', (e) => {
+            document.getElementById('subsample').addEventListener('change', (e) => {
                 document.getElementById('subsample-value').textContent = `${e.target.value}x`;
                 if (currentLayer) loadLayer(currentLayer);
             });
 
-            document.getElementById('max-side').addEventListener('input', (e) => {
+            document.getElementById('max-side').addEventListener('change', (e) => {
                 document.getElementById('max-side-value').textContent = `${e.target.value}`;
                 if (currentLayer) loadLayer(currentLayer);
             });
@@ -490,8 +470,8 @@
         }
 
         window.addEventListener('resize', () => {
-            if (currentLayer) {
-                loadLayer(currentLayer);
+            if (lastFetchedMatrix) {
+                drawHeatmap(lastFetchedMatrix);
             }
         });
 

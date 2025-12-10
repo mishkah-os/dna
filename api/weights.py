@@ -137,8 +137,8 @@ def prepare_heatmap(weights_array, subsample: int = 1, max_side: int = 256):
         "shape": [int(sampled.shape[0]), int(sampled.shape[1])],
         "stride": [int(row_stride), int(col_stride)],
         "stats": {
-            "min": float(sampled.min()),
-            "max": float(sampled.max()),
+            "min": float(w_min),
+            "max": float(w_max),
             "mean": float(sampled.mean()),
             "std": float(sampled.std()),
         }

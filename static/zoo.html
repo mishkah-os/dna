@@ -1165,14 +1165,19 @@
                 } else {
                     sections.forEach(s => s.style.display = '');
                     cards.forEach(c => {
-                        const modalityMatch = ['text', 'vision', 'audio', 'multimodal'].includes(filter) && c.dataset.modality === filter;
-                        const specialization = c.dataset.specialization || 'general';
-                        const hasSpecialization = specialization !== 'general';
-                        const specializationMatch = ['specialized', 'math', 'biology', 'coding'].includes(filter) && (
-                            filter === 'specialized' ? hasSpecialization : specialization === filter
-                        );
+                        const modelModality = c.dataset.modality;
+                        const modelSpecialization = c.dataset.specialization || 'general';
+                        let isVisible = false;
 
-                        c.style.display = (modalityMatch || specializationMatch) ? '' : 'none';
+                        if (['text', 'vision', 'audio', 'multimodal'].includes(filter)) {
+                            isVisible = modelModality === filter;
+                        } else if (filter === 'specialized') {
+                            isVisible = modelSpecialization !== 'general';
+                        } else if (['math', 'biology', 'coding'].includes(filter)) {
+                            isVisible = modelSpecialization === filter;
+                        }
+
+                        c.style.display = isVisible ? '' : 'none';
                     });
                 }
             });

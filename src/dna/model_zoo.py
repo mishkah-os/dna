@@ -606,9 +606,9 @@ MODEL_ZOO: Dict[str, TinyModel] = {
 
     "llama3-code-8b": TinyModel(
         id="llama3-code-8b",
-        name="Llama-3-Code-8B",
-        hf_name="meta-llama/llama-3-8b-instruct",
-        params_millions=8000.0,
+        name="CodeLlama-7B-Instruct",
+        hf_name="meta-llama/CodeLlama-7b-Instruct-hf",
+        params_millions=7000.0,
         architecture=Architecture.DECODER,
         modality=Modality.TEXT,
         tasks=[TaskType.TEXT_GENERATION, TaskType.QUESTION_ANSWERING],
@@ -669,8 +669,8 @@ MODEL_ZOO: Dict[str, TinyModel] = {
 
     "qwen2.5-code-7b": TinyModel(
         id="qwen2.5-code-7b",
-        name="Qwen2.5-Code-7B",
-        hf_name="Qwen/Qwen2.5-Code-7B-Instruct",
+        name="Qwen2.5-Coder-7B",
+        hf_name="Qwen/Qwen2.5-Coder-7B-Instruct",
         params_millions=7610.0,
         architecture=Architecture.DECODER,
         modality=Modality.TEXT,
