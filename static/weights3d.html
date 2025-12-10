@@ -218,6 +218,15 @@
         let currentLayer = null;
         let allLayers = [];
 
+        // Auth
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login.html';
+        }
+        const authHeaders = {
+            'Authorization': `Bearer ${token}`
+        };
+
         function initThreeJS() {
             // Scene
             scene = new THREE.Scene();
@@ -312,7 +321,7 @@
             currentModel = modelId;
 
             try {
-                const response = await fetch(`/api/weights/${modelId}/layers`);
+                const response = await fetch(`/api/weights/${modelId}/layers`, { headers: authHeaders });
                 const data = await response.json();
 
                 allLayers = data.layers;
@@ -347,7 +356,8 @@
                 const heightScale = document.getElementById('height-scale').value;
 
                 const response = await fetch(
-                    `/api/weights/${currentModel}/layer/${layerName}/3d?subsample=${subsample}&height_scale=${heightScale}`
+                    `/api/weights/${currentModel}/layer/${layerName}/3d?subsample=${subsample}&height_scale=${heightScale}`,
+                    { headers: authHeaders }
                 );
                 const data = await response.json();
 
@@ -451,15 +461,34 @@
 
         initThreeJS();
 
-        // Load first model (tinybert or first loaded)
-        fetch('/api/weights/tinybert/loaded-models')
-            .then(r => r.json())
-            .then(data => {
-                // Try to load tinybert, fallback to first loaded
-                loadLayers('tinybert').catch(() => {
-                    alert('الرجاء تحميل نموذج أولاً من Play Store');
+        async function pickModelId() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('model')) {
+                return params.get('model');
+            }
+
+            try {
+                const response = await fetch('/api/zoo/loaded', { headers: authHeaders });
+                const data = await response.json();
+                if (data.loaded_models?.length) {
+                    return data.loaded_models[0].id;
+                }
+            } catch (error) {
+                console.error('Failed to fetch loaded models:', error);
+            }
+
+            return null;
+        }
+
+        pickModelId().then(modelId => {
+            if (modelId) {
+                loadLayers(modelId).catch(() => {
+                    alert('تعذر تحميل النموذج المحدد. تأكد من أنه محمل من Play Store.');
                 });
-            });
+            } else {
+                alert('لا يوجد أي نموذج محمّل. يرجى تحميل نموذج من Play Store أولاً.');
+            }
+        });
     </script>
 </body>
 
