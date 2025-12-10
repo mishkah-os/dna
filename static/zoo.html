@@ -694,6 +694,9 @@
 
                 // Update loaded models
                 updateLoadedStats();
+
+                // Resume any active download after refresh
+                resumeActiveDownload();
             } catch (error) {
                 console.error('Failed to load catalog:', error);
             }
@@ -800,6 +803,9 @@
                 //Update UI to show downloading
                 updateModelStatus(modelId, 'downloading');
 
+                // Persist active download so it survives refresh
+                localStorage.setItem('activeDownload', modelId);
+
                 const response = await fetch(`${API_BASE}/zoo/download`, {
                     method: 'POST',
                     headers: authHeaders,
@@ -827,10 +833,10 @@
         // Update download progress UI
         function updateDownloadProgress(percent, downloaded_mb, total_mb, speed_mbps, eta) {
             document.getElementById('download-progress-bar').style.width = `${percent}%`;
-            document.getElementById('download-progress-bar').textContent = `${Math.round(percent)}%`;
-            document.getElementById('download-size').textContent = `${downloaded_mb.toFixed(1)} MB / ${total_mb.toFixed(1)} MB`;
-            document.getElementById('download-speed').textContent = `${speed_mbps.toFixed(2)} MB/s`;
-            document.getElementById('download-eta').textContent = eta;
+                document.getElementById('download-progress-bar').textContent = `${Math.round(percent)}%`;
+                document.getElementById('download-size').textContent = `${downloaded_mb.toFixed(1)} MB / ${total_mb.toFixed(1)} MB`;
+                document.getElementById('download-speed').textContent = `${speed_mbps.toFixed(2)} MB/s`;
+                document.getElementById('download-eta').textContent = eta;
         }
 
         // Poll download progress
@@ -880,8 +886,10 @@
                         updateDownloadProgress(100, data.download_progress?.total_mb || 0, data.download_progress?.total_mb || 0, 0, '0:00');
                         addDownloadLog(`✓ اكتمل التحميل! ${(data.download_progress?.total_mb || 0).toFixed(1)} MB`, 'success');
                         updateLoadedStats();
+                        localStorage.removeItem('activeDownload');
                     } else if (data.status === 'error') {
                         addDownloadLog(`✗ فشل التحميل`, 'error');
+                        localStorage.removeItem('activeDownload');
                     }
                 } catch (error) {
                     console.error('Poll failed:', error);
@@ -889,6 +897,26 @@
                 }
             };
             poll();
+        }
+
+        // Resume active downloads after refresh
+        function resumeActiveDownload() {
+            const activeId = localStorage.getItem('activeDownload');
+
+            // Find any model marked as downloading
+            const allModels = [...catalog.text, ...catalog.vision, ...catalog.audio, ...catalog.multimodal];
+            const downloadingModel = allModels.find(m => m.status === 'downloading' || m.id === activeId);
+
+            if (!downloadingModel) {
+                localStorage.removeItem('activeDownload');
+                return;
+            }
+
+            const modelName = downloadingModel.name || downloadingModel.id;
+            document.getElementById('download-model-name').textContent = modelName;
+            document.getElementById('download-modal').classList.add('active');
+            addDownloadLog(`● استكمال التحميل لـ ${modelName}...`);
+            pollDownloadProgress(downloadingModel.id);
         }
 
         // Update model status in UI
