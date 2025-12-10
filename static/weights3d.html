@@ -8,6 +8,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="/static/js/auth.js"></script>
 
     <style>
         * {
@@ -159,6 +160,7 @@
         <button onclick="toggleWireframe()">🔲 Wireframe</button>
         <button onclick="resetCamera()">🎯 Reset Camera</button>
         <button onclick="toggleRotation()">🔄 Auto Rotate</button>
+        <button onclick="openHeatmap()">🗺️ عرض Heatmap 2D</button>
 
         <label>Subsample (أقل = تفاصيل أكثر):</label>
         <input type="range" id="subsample" min="1" max="20" value="10">
@@ -217,6 +219,10 @@
         let currentModel = null;
         let currentLayer = null;
         let allLayers = [];
+
+        // Auth
+        const authHeaders = auth.buildAuthHeaders(auth.ensureToken());
+        const fetchWithAuth = auth.fetchWithAuth;
 
         function initThreeJS() {
             // Scene
@@ -312,7 +318,7 @@
             currentModel = modelId;
 
             try {
-                const response = await fetch(`/api/weights/${modelId}/layers`);
+                const response = await fetchWithAuth(`/api/weights/${modelId}/layers`);
                 const data = await response.json();
 
                 allLayers = data.layers;
@@ -346,7 +352,7 @@
                 const subsample = document.getElementById('subsample').value;
                 const heightScale = document.getElementById('height-scale').value;
 
-                const response = await fetch(
+                const response = await fetchWithAuth(
                     `/api/weights/${currentModel}/layer/${layerName}/3d?subsample=${subsample}&height_scale=${heightScale}`
                 );
                 const data = await response.json();
@@ -436,6 +442,14 @@
             autoRotate = !autoRotate;
         }
 
+        function openHeatmap() {
+            if (!currentModel) {
+                alert('حمّل نموذجًا أولاً من Play Store.');
+                return;
+            }
+            window.location.href = `/static/weights2d.html?model=${currentModel}`;
+        }
+
         // Layer search
         document.getElementById('layer-search').addEventListener('input', (e) => {
             const query = e.target.value.toLowerCase();
@@ -451,15 +465,41 @@
 
         initThreeJS();
 
-        // Load first model (tinybert or first loaded)
-        fetch('/api/weights/tinybert/loaded-models')
-            .then(r => r.json())
-            .then(data => {
-                // Try to load tinybert, fallback to first loaded
-                loadLayers('tinybert').catch(() => {
-                    alert('الرجاء تحميل نموذج أولاً من Play Store');
+        async function pickModelId() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('model')) {
+                return { modelId: params.get('model') };
+            }
+
+            try {
+                const response = await fetchWithAuth('/api/zoo/loaded');
+                const data = await response.json();
+                if (data.loaded_models?.length) {
+                    return { modelId: data.loaded_models[0].id };
+                }
+                return { modelId: null, error: 'no-models' };
+            } catch (error) {
+                console.error('Failed to fetch loaded models:', error);
+                return { modelId: null, error: 'api-error' };
+            }
+        }
+
+        pickModelId().then(({ modelId, error }) => {
+            if (modelId) {
+                loadLayers(modelId).catch((err) => {
+                    console.error('Failed to load selected model:', err);
+                    alert('تعذر تحميل النموذج المحدد. تأكد من أنه محمل من Play Store.');
                 });
-            });
+                return;
+            }
+
+            if (error === 'api-error') {
+                alert('تعذر جلب النماذج المحملة. يرجى إعادة المحاولة أو تسجيل الدخول مرة أخرى.');
+                return;
+            }
+
+            alert('لا يوجد أي نموذج محمّل. يرجى تحميل نموذج من Play Store أولاً.');
+        });
     </script>
 </body>
 

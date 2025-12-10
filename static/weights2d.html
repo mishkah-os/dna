@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNA - 2D Heatmap Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', 'Inter', sans-serif;
+            background: #050712;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 320px 1fr 320px;
+            grid-template-rows: auto 1fr;
+            gap: 16px;
+            height: 100vh;
+            padding: 16px;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 16px;
+            backdrop-filter: blur(6px);
+        }
+
+        .panel h3 {
+            margin-bottom: 12px;
+            color: #a5b4fc;
+            font-size: 1rem;
+        }
+
+        #heatmap-canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 14px;
+            background: #0a0e1f;
+        }
+
+        #heatmap-wrapper {
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        #heatmap-meta {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+
+        .control-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+
+        input[type="range"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            font-family: inherit;
+        }
+
+        #layers-list {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .layer-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            border-right: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .layer-item:hover {
+            background: rgba(99, 102, 241, 0.15);
+            border-right-color: #6366f1;
+        }
+
+        .layer-item.active {
+            background: rgba(99, 102, 241, 0.25);
+            border-right-color: #a855f7;
+        }
+
+        .layer-name {
+            font-weight: 700;
+        }
+
+        .layer-info {
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        #stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .stat {
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .stat-label {
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        .stat-value {
+            font-weight: 700;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .header h2 {
+            font-size: 1.1rem;
+        }
+
+        .pill {
+            padding: 6px 10px;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.35);
+            border-radius: 999px;
+            color: #a5b4fc;
+            font-size: 0.9rem;
+        }
+
+        .cta-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: rgba(34, 197, 94, 0.12);
+            color: #bbf7d0;
+            text-decoration: none;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        #loading {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            background: rgba(5, 7, 18, 0.6);
+            backdrop-filter: blur(2px);
+            color: #cbd5e1;
+            font-weight: 700;
+            z-index: 10;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="panel" style="grid-row: span 2;">
+            <div class="header">
+                <h2>📊 تحكم و اختيار النموذج</h2>
+                <a id="open-3d" class="cta-link" href="/static/weights3d.html">🌌 عرض 3D</a>
+            </div>
+            <div class="control-group">
+                <label for="model-select">النموذج المحمل</label>
+                <select id="model-select"></select>
+            </div>
+            <div class="control-group">
+                <label for="subsample">التجزئة (كل كم عنصر؟)</label>
+                <input type="range" id="subsample" min="1" max="10" value="1">
+                <div class="pill" id="subsample-value">1x</div>
+            </div>
+            <div class="control-group">
+                <label for="max-side">أقصى طول للجانب</label>
+                <input type="range" id="max-side" min="64" max="512" value="256" step="32">
+                <div class="pill" id="max-side-value">256</div>
+            </div>
+            <div class="control-group">
+                <label for="layer-search">بحث في الطبقات</label>
+                <input type="text" id="layer-search" placeholder="ابحث...">
+            </div>
+            <div id="layers-list">تحميل الطبقات...</div>
+        </div>
+
+        <div id="heatmap-wrapper" class="panel" style="grid-row: span 2; position: relative;">
+            <div id="loading" style="display: none;">جاري تحميل الطبقة...</div>
+            <div id="heatmap-meta">-</div>
+            <canvas id="heatmap-canvas"></canvas>
+        </div>
+
+        <div class="panel">
+            <div class="header">
+                <h2>📈 إحصاءات</h2>
+                <span class="pill" id="layer-name">بدون طبقة</span>
+            </div>
+            <div id="stats">
+                <div class="stat">
+                    <div class="stat-label">الشكل</div>
+                    <div class="stat-value" id="stat-shape">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">min</div>
+                    <div class="stat-value" id="stat-min">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">max</div>
+                    <div class="stat-value" id="stat-max">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">mean</div>
+                    <div class="stat-value" id="stat-mean">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">std</div>
+                    <div class="stat-value" id="stat-std">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">stride</div>
+                    <div class="stat-value" id="stat-stride">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        const authHeaders = auth.buildAuthHeaders(auth.ensureToken());
+        const fetchWithAuth = auth.fetchWithAuth;
+
+        let currentModel = null;
+        let currentLayer = null;
+        let allLayers = [];
+        let lastFetchedMatrix = null;
+
+        const canvas = document.getElementById('heatmap-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas(shape) {
+            const container = document.getElementById('heatmap-wrapper');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+
+        function colorForValue(v) {
+            // A gradient from blue (v=0.0) -> purple (v=0.5) -> red (v=1.0)
+            let r, g, b;
+            if (v < 0.5) {
+                const t = v * 2; // scale to 0-1 range
+                r = t * 160;
+                g = t * 100;
+                b = 200 + t * 55;
+            } else {
+                const t = (v - 0.5) * 2; // scale to 0-1 range
+                r = 160 + t * 95;
+                g = (1 - t) * 80;
+                b = (1 - t) * 120;
+            }
+            return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+        }
+
+        function drawHeatmap(matrix) {
+            if (!matrix || matrix.length === 0 || matrix[0].length === 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
+            resizeCanvas();
+            const rows = matrix.length;
+            const cols = matrix[0].length;
+
+            const cellWidth = canvas.width / cols;
+            const cellHeight = canvas.height / rows;
+
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    ctx.fillStyle = colorForValue(matrix[i][j]);
+                    ctx.fillRect(j * cellWidth, i * cellHeight, cellWidth + 1, cellHeight + 1);
+                }
+            }
+        }
+
+        async function loadLayers(modelId) {
+            currentModel = modelId;
+            document.getElementById('loading').style.display = 'grid';
+
+            try {
+                const response = await fetchWithAuth(`/api/weights/${modelId}/layers`);
+                const data = await response.json();
+                allLayers = data.layers || [];
+                renderLayers(allLayers);
+                document.getElementById('model-select').value = modelId;
+
+                if (allLayers.length > 0) {
+                    await loadLayer(allLayers[0].name);
+                }
+            } catch (error) {
+                console.error('Error loading layers:', error);
+                alert('فشل في تحميل طبقات النموذج.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function renderLayers(layers) {
+            const container = document.getElementById('layers-list');
+            container.innerHTML = layers.map(layer => `
+                <div class="layer-item" data-name="${layer.name}" onclick="loadLayer('${layer.name}')">
+                    <div class="layer-name">${layer.name}</div>
+                    <div class="layer-info">${layer.shape.join(' × ')} • mean ${layer.mean.toFixed(3)}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadLayer(layerName) {
+            if (!currentModel) return;
+            currentLayer = layerName;
+            document.getElementById('loading').style.display = 'grid';
+            document.getElementById('layer-name').textContent = layerName;
+
+            try {
+                const subsample = document.getElementById('subsample').value;
+                const maxSide = document.getElementById('max-side').value;
+                const response = await fetchWithAuth(`/api/weights/${currentModel}/layer/${layerName}/heatmap?subsample=${subsample}&max_side=${maxSide}`);
+                const data = await response.json();
+
+                lastFetchedMatrix = data.matrix;
+                drawHeatmap(lastFetchedMatrix);
+                updateStats(data);
+                updateActiveLayer(layerName);
+                updateMeta(data);
+            } catch (error) {
+                console.error('Error loading layer heatmap:', error);
+                alert('تعذر تحميل الخريطة الحرارية للطبقة.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function updateActiveLayer(name) {
+            document.querySelectorAll('.layer-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.name === name);
+            });
+        }
+
+        function updateStats(data) {
+            document.getElementById('stat-shape').textContent = data.shape.join(' × ');
+            document.getElementById('stat-min').textContent = data.stats.min.toFixed(4);
+            document.getElementById('stat-max').textContent = data.stats.max.toFixed(4);
+            document.getElementById('stat-mean').textContent = data.stats.mean.toFixed(4);
+            document.getElementById('stat-std').textContent = data.stats.std.toFixed(4);
+            document.getElementById('stat-stride').textContent = data.stride.join(' , ');
+        }
+
+        function updateMeta(data) {
+            document.getElementById('heatmap-meta').textContent = `${data.shape.join(' × ')} • stride ${data.stride.join('x')}`;
+        }
+
+        async function populateModels() {
+            const select = document.getElementById('model-select');
+            select.innerHTML = '<option>جارٍ التحميل...</option>';
+
+            try {
+                const response = await fetchWithAuth('/api/zoo/loaded');
+                const data = await response.json();
+                const models = data.loaded_models || [];
+
+                if (!models.length) {
+                    select.innerHTML = '<option>لا يوجد نموذج محمل</option>';
+                    return { modelId: null, error: 'no-models' };
+                }
+
+                select.innerHTML = models.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+                return { modelId: models[0].id };
+            } catch (error) {
+                console.error('Failed to fetch loaded models:', error);
+                select.innerHTML = '<option>تعذر جلب النماذج</option>';
+                return { modelId: null, error: 'api-error' };
+            }
+        }
+
+        function syncControls() {
+            document.getElementById('subsample').addEventListener('change', (e) => {
+                document.getElementById('subsample-value').textContent = `${e.target.value}x`;
+                if (currentLayer) loadLayer(currentLayer);
+            });
+
+            document.getElementById('max-side').addEventListener('change', (e) => {
+                document.getElementById('max-side-value').textContent = `${e.target.value}`;
+                if (currentLayer) loadLayer(currentLayer);
+            });
+
+            document.getElementById('layer-search').addEventListener('input', (e) => {
+                const q = e.target.value.toLowerCase();
+                const filtered = allLayers.filter(l => l.name.toLowerCase().includes(q));
+                renderLayers(filtered);
+            });
+
+            document.getElementById('model-select').addEventListener('change', (e) => {
+                loadLayers(e.target.value);
+                updateLinks(e.target.value);
+            });
+        }
+
+        function updateLinks(modelId) {
+            const link = document.getElementById('open-3d');
+            link.href = `/static/weights3d.html?model=${modelId}`;
+        }
+
+        async function bootstrap() {
+            syncControls();
+            const params = new URLSearchParams(window.location.search);
+            const explicitModel = params.get('model');
+
+            if (explicitModel) {
+                document.getElementById('model-select').innerHTML = `<option value="${explicitModel}">${explicitModel}</option>`;
+                updateLinks(explicitModel);
+                await loadLayers(explicitModel);
+                return;
+            }
+
+            const { modelId, error } = await populateModels();
+            if (modelId) {
+                updateLinks(modelId);
+                await loadLayers(modelId);
+                return;
+            }
+
+            if (error === 'api-error') {
+                alert('تعذر جلب قائمة النماذج المحملة. حاول إعادة تسجيل الدخول.');
+                return;
+            }
+
+            alert('لا يوجد أي نموذج محمّل. قم بتحميل نموذج من Play Store أولاً.');
+        }
+
+        window.addEventListener('resize', () => {
+            if (lastFetchedMatrix) {
+                drawHeatmap(lastFetchedMatrix);
+            }
+        });
+
+        bootstrap();
+    </script>
+</body>
+
+</html>
