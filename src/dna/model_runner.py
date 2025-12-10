@@ -122,6 +122,7 @@ class TinyModelRunner:
         self._models: Dict[str, Any] = {}
         self._tokenizers: Dict[str, Any] = {}
         self._pipelines: Dict[str, Any] = {}
+        self._errors: Dict[str, str] = {}
         
         # Track status
         self._status: Dict[str, ModelStatus] = {}
@@ -131,6 +132,10 @@ class TinyModelRunner:
     def get_status(self, model_id: str) -> ModelStatus:
         """Get the current status of a model"""
         return self._status.get(model_id, ModelStatus.NOT_DOWNLOADED)
+    
+    def get_error(self, model_id: str) -> Optional[str]:
+        """Get last error message for a model (if any)"""
+        return self._errors.get(model_id)
     
     def download(self, model_id: str, force: bool = False) -> bool:
         """
@@ -171,6 +176,7 @@ class TinyModelRunner:
             )
             
             self._status[model_id] = ModelStatus.DOWNLOADED
+            self._errors.pop(model_id, None)
             logger.info(f"✅ Downloaded {model_info.name}")
             
             # Don't keep in memory unless requested
@@ -181,6 +187,7 @@ class TinyModelRunner:
             
         except Exception as e:
             self._status[model_id] = ModelStatus.ERROR
+            self._errors[model_id] = str(e)
             logger.error(f"❌ Failed to download {model_id}: {e}")
             return False
     
@@ -216,20 +223,34 @@ class TinyModelRunner:
                 cache_dir=str(self.cache_dir),
             )
             
-            # Load model
-            self._models[model_id] = AutoModel.from_pretrained(
-                model_info.hf_name,
-                cache_dir=str(self.cache_dir),
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                low_cpu_mem_usage=self.low_memory,
-            ).to(self.device).eval()
+            def _load_model(low_mem: bool):
+                return AutoModel.from_pretrained(
+                    model_info.hf_name,
+                    cache_dir=str(self.cache_dir),
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    low_cpu_mem_usage=low_mem,
+                )
+            
+            try:
+                model = _load_model(self.low_memory)
+            except Exception as e:
+                # Fallback if accelerate is missing or low_cpu_mem_usage fails
+                if "accelerate" in str(e).lower() or "low_cpu_mem_usage" in str(e):
+                    logger.warning("low_cpu_mem_usage failed; retrying without it")
+                    model = _load_model(False)
+                else:
+                    raise
+            
+            self._models[model_id] = model.to(self.device).eval()
             
             self._status[model_id] = ModelStatus.READY
+            self._errors.pop(model_id, None)
             logger.info(f"✅ Loaded {model_info.name}")
             return True
             
         except Exception as e:
             self._status[model_id] = ModelStatus.ERROR
+            self._errors[model_id] = str(e)
             logger.error(f"❌ Failed to load {model_id}: {e}")
             return False
     
@@ -545,6 +566,10 @@ class TinyModelRunner:
     def get_loaded_models(self) -> List[str]:
         """Get list of currently loaded models"""
         return list(self._models.keys())
+
+    def is_loaded(self, model_id: str) -> bool:
+        """Check if model is loaded in memory"""
+        return model_id in self._models
     
     def get_memory_usage(self) -> Dict[str, float]:
         """Get memory usage in MB for loaded models"""
@@ -568,6 +593,10 @@ def get_runner() -> TinyModelRunner:
     if _runner_instance is None:
         _runner_instance = TinyModelRunner()
     return _runner_instance
+
+# Backwards-compat alias
+def get_model_runner() -> TinyModelRunner:
+    return get_runner()
 
 
 # ============================================================================

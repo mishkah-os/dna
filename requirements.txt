@@ -4,6 +4,7 @@
 torch>=2.0.0
 transformers>=4.35.0
 safetensors>=0.4.0
+accelerate>=0.31.0
 
 # Web Framework
 fastapi>=0.104.0

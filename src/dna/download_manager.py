@@ -5,6 +5,7 @@ Handles model downloads with progress tracking, resume capability, and retry log
 
 import time
 import logging
+import os
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Callable, List
@@ -154,63 +155,78 @@ class DownloadManager:
         self._active_downloads[model_id] = progress
         
         try:
-            # Use HuggingFace Hub with progress tracking
-            from huggingface_hub import snapshot_download
-            from tqdm import tqdm
+            # Use HuggingFace Hub and track progress per file (coarse but visible)
+            from huggingface_hub import HfApi, hf_hub_download
             
-            # Progress tracking
+            api = HfApi()
+            logger.info(f"Downloading {model_info.name} from {model_info.hf_name}")
+
+            # List files to know what to fetch; fail fast if empty
+            try:
+                info = api.model_info(model_info.hf_name)
+                siblings = info.siblings or []
+            except Exception as e:
+                logger.error(f"Cannot list files for {model_info.hf_name}: {e}")
+                progress.status = DownloadStatus.FAILED
+                progress.error = str(e)
+                if progress_callback:
+                    progress_callback(progress)
+                return False
+
+            if not siblings:
+                progress.status = DownloadStatus.FAILED
+                progress.error = "No files found in repository"
+                if progress_callback:
+                    progress_callback(progress)
+                return False
+            
+            total_bytes = sum([(s.size or 0) for s in siblings])
+            progress.total_bytes = total_bytes
             last_update = time.time()
             last_bytes = 0
             
-            def on_hf_progress(current, total):
-                """Callback from HF download"""
-                nonlocal last_update, last_bytes
-                
-                now = time.time()
-                progress.total_bytes = total
-                progress.downloaded_bytes = current
-                
-                if total > 0:
-                    progress.percentage = (current / total) * 100
-                
-                # Calculate speed (every 0.5 seconds)
-                if now - last_update >= 0.5:
-                    bytes_diff = current - last_bytes
-                    time_diff = now - last_update
-                    
-                    if time_diff > 0:
-                        bytes_per_sec = bytes_diff / time_diff
-                        progress.speed_mbps = bytes_per_sec / (1024**2)
-                        
-                        # Calculate ETA
-                        bytes_remaining = total - current
-                        if bytes_per_sec > 0:
-                            progress.eta_seconds = bytes_remaining / bytes_per_sec
-                    
-                    last_update = now
-                    last_bytes = current
-                    
-                    # Callback
-                    if progress_callback:
-                        progress_callback(progress)
-            
-            logger.info(f"Downloading {model_info.name} from {model_info.hf_name}")
-            
-            # Download with retries
             for attempt in range(self.max_retries):
                 try:
-                    # Download all files
-                    local_dir = snapshot_download(
-                        repo_id=model_info.hf_name,
-                        cache_dir=str(self.cache_dir),
-                        resume_download=True,  # Resume if interrupted
-                        local_files_only=False,
-                    )
+                    downloaded = 0
+                    for sib in siblings:
+                        target_size = sib.size or 0
+                        local_path = hf_hub_download(
+                            repo_id=model_info.hf_name,
+                            filename=sib.rfilename,
+                            cache_dir=str(self.cache_dir),
+                            resume_download=True,
+                            local_files_only=False,
+                        )
+                        # Use reported size or actual file size if missing
+                        file_size = target_size or os.path.getsize(local_path)
+                        downloaded += file_size
+                        progress.downloaded_bytes = downloaded
+                        # If HF didn't provide total size, derive from downloaded so far
+                        progress.total_bytes = total_bytes if total_bytes > 0 else max(progress.total_bytes, downloaded)
+                        progress.percentage = (progress.downloaded_bytes / progress.total_bytes) * 100 if progress.total_bytes else 0
+                        
+                        now = time.time()
+                        if now - last_update > 0:
+                            bytes_diff = progress.downloaded_bytes - last_bytes
+                            time_diff = now - last_update
+                            progress.speed_mbps = (bytes_diff / time_diff) / (1024**2)
+                            bytes_remaining = progress.total_bytes - progress.downloaded_bytes
+                            progress.eta_seconds = bytes_remaining / (bytes_diff / time_diff) if bytes_diff and time_diff else 0
+                            last_update = now
+                            last_bytes = progress.downloaded_bytes
+                        
+                        if progress_callback:
+                            progress_callback(progress)
                     
+                    if downloaded == 0:
+                        raise RuntimeError("Downloaded zero bytes; aborting")
+
                     # Success!
                     progress.status = DownloadStatus.COMPLETED
                     progress.end_time = time.time()
                     progress.percentage = 100.0
+                    progress.speed_mbps = 0.0
+                    progress.eta_seconds = 0.0
                     
                     if progress_callback:
                         progress_callback(progress)
@@ -219,15 +235,19 @@ class DownloadManager:
                     return True
                     
                 except Exception as e:
+                    progress.status = DownloadStatus.FAILED
+                    progress.error = str(e)
+                    if progress_callback:
+                        progress_callback(progress)
                     logger.warning(f"Download attempt {attempt + 1}/{self.max_retries} failed: {e}")
                     
                     if attempt < self.max_retries - 1:
-                        # Exponential backoff
                         wait_time = 2 ** attempt
                         logger.info(f"Retrying in {wait_time}s...")
                         time.sleep(wait_time)
+                        progress.status = DownloadStatus.DOWNLOADING
+                        continue
                     else:
-                        # Final failure
                         raise
             
         except Exception as e:
@@ -267,12 +287,18 @@ class DownloadManager:
     # ------------------------------------------------------------------ #
     # Compatibility helper for API layer
     # ------------------------------------------------------------------ #
-    def download_model(self, model_id: str, hf_name: Optional[str] = None, force: bool = False) -> bool:
+    def download_model(
+        self,
+        model_id: str,
+        hf_name: Optional[str] = None,
+        force: bool = False,
+        progress_callback: Optional[Callable[[DownloadProgress], None]] = None,
+    ) -> bool:
         """
         Wrapper expected by api.zoo to start a download.
         hf_name is ignored because the manager already looks up model metadata internally.
         """
-        return self.download(model_id=model_id, force=force)
+        return self.download(model_id=model_id, force=force, progress_callback=progress_callback)
 
 
 # ============================================================================
@@ -317,7 +343,7 @@ if __name__ == "__main__":
               f"{progress.speed_mbps:5.2f} MB/s | ETA: {progress.eta_seconds:4.0f}s", 
               end="", flush=True)
     
-    success = manager.download(model_id, progress_callback=on_progress)
+        success = manager.download(model_id, progress_callback=on_progress)
     
     print()
     if success:
