@@ -557,6 +557,7 @@
             <button class="filter-btn" data-filter="text">🔤 نص</button>
             <button class="filter-btn" data-filter="vision">👁️ صور</button>
             <button class="filter-btn" data-filter="audio">🔊 صوت</button>
+            <button class="filter-btn" data-filter="multimodal">🎨 متعدد الوسائط</button>
             <button class="filter-btn" data-filter="specialized">🧭 متخصصة</button>
             <button class="filter-btn" data-filter="math">➗ رياضيات</button>
             <button class="filter-btn" data-filter="biology">🧬 DNA/بيولوجيا</button>
@@ -684,13 +685,14 @@
         let catalog = { text: [], vision: [], audio: [], multimodal: [] };
 
         const SPECIALIZATION_KEYWORDS = {
-            math: [/math/i, /رياضيات/, /arithmetic/i, /calculus/i],
-            biology: [/bio/i, /genom/i, /dna/i, /protein/i, /rna/i, /بيولوجيا/, /جين/],
-            coding: [/code/i, /coding/i, /program/i, /developer/i, /software/i, /برمجة/, /كود/]
+            math: [/math/i, /رياضيات/, /arithmetic/i, /calculus/i, /reasoning/i, /deepseek-r1/i, /proof/i],
+            biology: [/bio/i, /genom/i, /dna/i, /protein/i, /rna/i, /بيولوجيا/, /جين/, /esm/i, /evodna/i, /genslm/i],
+            coding: [/code/i, /coding/i, /program/i, /developer/i, /software/i, /برمجة/, /كود/, /coder/i, /starcoder/i]
         };
 
         function categorizeSpecialization(model) {
-            const haystack = `${model.name || ''} ${model.family || ''} ${(model.tasks || []).join(' ')}`.toLowerCase();
+            const specialtyText = (model.specialty || '').toLowerCase();
+            const haystack = `${model.name || ''} ${model.family || ''} ${specialtyText} ${(model.tasks || []).join(' ')}`.toLowerCase();
 
             if (SPECIALIZATION_KEYWORDS.math.some(k => k.test(haystack))) return 'math';
             if (SPECIALIZATION_KEYWORDS.biology.some(k => k.test(haystack))) return 'biology';
@@ -776,6 +778,17 @@
                 'multimodal': '🎨'
             }[model.modality] || '📦';
 
+            const specializationLabel = {
+                'math': '➗ رياضيات',
+                'biology': '🧬 DNA/بيولوجيا',
+                'coding': '💻 Coding',
+                'general': 'عام'
+            }[model.specialization || 'general'];
+
+            const specializationTag = (model.specialization && model.specialization !== 'general')
+                ? `<span class="meta-tag" style="background: rgba(99,102,241,0.12); color: #c7d2fe;">${specializationLabel}</span>`
+                : '';
+
             return `
                 <div class="model-card" data-model-id="${model.id}" data-modality="${model.modality}" data-specialization="${model.specialization || 'general'}" data-tier="${model.tier}">
                     <div class="model-header">
@@ -795,6 +808,7 @@
                     <div class="model-meta">
                         <span class="meta-tag modality">${modalityIcon} ${model.modality}</span>
                         <span class="meta-tag">${model.architecture}</span>
+                        ${specializationTag}
                         ${model.requires_gpu ? '<span class="meta-tag" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">GPU</span>' : '<span class="meta-tag" style="background: rgba(34, 197, 94, 0.1); color: #22c55e;">CPU</span>'}
                     </div>
                     <div class="model-size">

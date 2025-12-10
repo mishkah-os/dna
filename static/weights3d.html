@@ -159,6 +159,7 @@
         <button onclick="toggleWireframe()">🔲 Wireframe</button>
         <button onclick="resetCamera()">🎯 Reset Camera</button>
         <button onclick="toggleRotation()">🔄 Auto Rotate</button>
+        <button onclick="openHeatmap()">🗺️ عرض Heatmap 2D</button>
 
         <label>Subsample (أقل = تفاصيل أكثر):</label>
         <input type="range" id="subsample" min="1" max="20" value="10">
@@ -474,6 +475,14 @@
 
         function toggleRotation() {
             autoRotate = !autoRotate;
+        }
+
+        function openHeatmap() {
+            if (!currentModel) {
+                alert('حمّل نموذجًا أولاً من Play Store.');
+                return;
+            }
+            window.location.href = `/static/weights2d.html?model=${currentModel}`;
         }
 
         // Layer search
