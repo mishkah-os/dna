@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pathlib import Path
+import os
 import uvicorn
 import sys
 
@@ -86,19 +87,25 @@ app.mount("/", StaticFiles(directory=str(static_path), html=True), name="static"
 
 
 if __name__ == "__main__":
+    host = os.getenv("DNA_HOST", "0.0.0.0")
+    port = int(os.getenv("DNA_PORT", "8058"))
+    reload_enabled = os.getenv("DNA_RELOAD", "").lower() in {"1", "true", "yes", "on"}
+    workers_raw = os.getenv("DNA_WORKERS", "1")
+    workers = max(1, int(workers_raw)) if workers_raw.isdigit() else 1
+
     print("=" * 50)
     print("Starting DNA Pattern Explorer...")
     print("=" * 50)
-    print("Dashboard: http://localhost:8058")
-    print("Play Store: http://localhost:8058/zoo.html")
-    print("API Docs: http://localhost:8058/api/docs")
+    print(f"Dashboard: http://{host}:{port}")
+    print(f"Play Store: http://{host}:{port}/zoo.html")
+    print(f"API Docs: http://{host}:{port}/api/docs")
     print("=" * 50)
-    
+
     uvicorn.run(
         "app:app",
-        host="0.0.0.0",
-        port=8058,
-        reload=True,
+        host=host,
+        port=port,
+        reload=reload_enabled,
+        workers=1 if reload_enabled else workers,
         log_level="info"
     )
-
