@@ -557,6 +557,10 @@
             <button class="filter-btn" data-filter="text">🔤 نص</button>
             <button class="filter-btn" data-filter="vision">👁️ صور</button>
             <button class="filter-btn" data-filter="audio">🔊 صوت</button>
+            <button class="filter-btn" data-filter="specialized">🧭 متخصصة</button>
+            <button class="filter-btn" data-filter="math">➗ رياضيات</button>
+            <button class="filter-btn" data-filter="biology">🧬 DNA/بيولوجيا</button>
+            <button class="filter-btn" data-filter="coding">💻 Coding</button>
             <button class="filter-btn" data-filter="tier-1">⭐ Tier 1</button>
         </div>
 
@@ -679,12 +683,38 @@
         let currentModel = null;
         let catalog = { text: [], vision: [], audio: [], multimodal: [] };
 
+        const SPECIALIZATION_KEYWORDS = {
+            math: [/math/i, /رياضيات/, /arithmetic/i, /calculus/i],
+            biology: [/bio/i, /genom/i, /dna/i, /protein/i, /rna/i, /بيولوجيا/, /جين/],
+            coding: [/code/i, /coding/i, /program/i, /developer/i, /software/i, /برمجة/, /كود/]
+        };
+
+        function categorizeSpecialization(model) {
+            const haystack = `${model.name || ''} ${model.family || ''} ${(model.tasks || []).join(' ')}`.toLowerCase();
+
+            if (SPECIALIZATION_KEYWORDS.math.some(k => k.test(haystack))) return 'math';
+            if (SPECIALIZATION_KEYWORDS.biology.some(k => k.test(haystack))) return 'biology';
+            if (SPECIALIZATION_KEYWORDS.coding.some(k => k.test(haystack))) return 'coding';
+
+            return 'general';
+        }
+
+        function enrichCatalog(rawCatalog) {
+            const enrich = (models = []) => models.map(m => ({ ...m, specialization: categorizeSpecialization(m) }));
+            return {
+                text: enrich(rawCatalog.text),
+                vision: enrich(rawCatalog.vision),
+                audio: enrich(rawCatalog.audio),
+                multimodal: enrich(rawCatalog.multimodal)
+            };
+        }
+
         // Fetch catalog on load
         async function loadCatalog() {
             try {
                 const response = await fetch(`${API_BASE}/zoo/catalog`);
                 const data = await response.json();
-                catalog = data;
+                catalog = enrichCatalog(data);
 
                 // Update stats
                 document.getElementById('total-models').textContent = data.stats.total_models;
@@ -747,7 +777,7 @@
             }[model.modality] || '📦';
 
             return `
-                <div class="model-card" data-model-id="${model.id}" data-modality="${model.modality}" data-tier="${model.tier}">
+                <div class="model-card" data-model-id="${model.id}" data-modality="${model.modality}" data-specialization="${model.specialization || 'general'}" data-tier="${model.tier}">
                     <div class="model-header">
                         <div>
                             <div class="model-name">${model.name}</div>
@@ -1121,7 +1151,14 @@
                 } else {
                     sections.forEach(s => s.style.display = '');
                     cards.forEach(c => {
-                        c.style.display = c.dataset.modality === filter ? '' : 'none';
+                        const modalityMatch = ['text', 'vision', 'audio', 'multimodal'].includes(filter) && c.dataset.modality === filter;
+                        const specialization = c.dataset.specialization || 'general';
+                        const hasSpecialization = specialization !== 'general';
+                        const specializationMatch = ['specialized', 'math', 'biology', 'coding'].includes(filter) && (
+                            filter === 'specialized' ? hasSpecialization : specialization === filter
+                        );
+
+                        c.style.display = (modalityMatch || specializationMatch) ? '' : 'none';
                     });
                 }
             });
