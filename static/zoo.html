@@ -557,6 +557,11 @@
             <button class="filter-btn" data-filter="text">🔤 نص</button>
             <button class="filter-btn" data-filter="vision">👁️ صور</button>
             <button class="filter-btn" data-filter="audio">🔊 صوت</button>
+            <button class="filter-btn" data-filter="multimodal">🎨 متعدد الوسائط</button>
+            <button class="filter-btn" data-filter="specialized">🧭 متخصصة</button>
+            <button class="filter-btn" data-filter="math">➗ رياضيات</button>
+            <button class="filter-btn" data-filter="biology">🧬 DNA/بيولوجيا</button>
+            <button class="filter-btn" data-filter="coding">💻 Coding</button>
             <button class="filter-btn" data-filter="tier-1">⭐ Tier 1</button>
         </div>
 
@@ -679,12 +684,39 @@
         let currentModel = null;
         let catalog = { text: [], vision: [], audio: [], multimodal: [] };
 
+        const SPECIALIZATION_KEYWORDS = {
+            math: [/math/i, /رياضيات/, /arithmetic/i, /calculus/i, /reasoning/i, /deepseek-r1/i, /proof/i],
+            biology: [/bio/i, /genom/i, /dna/i, /protein/i, /rna/i, /بيولوجيا/, /جين/, /esm/i, /evodna/i, /genslm/i],
+            coding: [/code/i, /coding/i, /program/i, /developer/i, /software/i, /برمجة/, /كود/, /coder/i, /starcoder/i]
+        };
+
+        function categorizeSpecialization(model) {
+            const specialtyText = (model.specialty || '').toLowerCase();
+            const haystack = `${model.name || ''} ${model.family || ''} ${specialtyText} ${(model.tasks || []).join(' ')}`.toLowerCase();
+
+            if (SPECIALIZATION_KEYWORDS.math.some(k => k.test(haystack))) return 'math';
+            if (SPECIALIZATION_KEYWORDS.biology.some(k => k.test(haystack))) return 'biology';
+            if (SPECIALIZATION_KEYWORDS.coding.some(k => k.test(haystack))) return 'coding';
+
+            return 'general';
+        }
+
+        function enrichCatalog(rawCatalog) {
+            const enrich = (models = []) => models.map(m => ({ ...m, specialization: categorizeSpecialization(m) }));
+            return {
+                text: enrich(rawCatalog.text),
+                vision: enrich(rawCatalog.vision),
+                audio: enrich(rawCatalog.audio),
+                multimodal: enrich(rawCatalog.multimodal)
+            };
+        }
+
         // Fetch catalog on load
         async function loadCatalog() {
             try {
                 const response = await fetch(`${API_BASE}/zoo/catalog`);
                 const data = await response.json();
-                catalog = data;
+                catalog = enrichCatalog(data);
 
                 // Update stats
                 document.getElementById('total-models').textContent = data.stats.total_models;
@@ -694,6 +726,9 @@
 
                 // Update loaded models
                 updateLoadedStats();
+
+                // Resume any active download after refresh
+                resumeActiveDownload();
             } catch (error) {
                 console.error('Failed to load catalog:', error);
             }
@@ -743,8 +778,19 @@
                 'multimodal': '🎨'
             }[model.modality] || '📦';
 
+            const specializationLabel = {
+                'math': '➗ رياضيات',
+                'biology': '🧬 DNA/بيولوجيا',
+                'coding': '💻 Coding',
+                'general': 'عام'
+            }[model.specialization || 'general'];
+
+            const specializationTag = (model.specialization && model.specialization !== 'general')
+                ? `<span class="meta-tag" style="background: rgba(99,102,241,0.12); color: #c7d2fe;">${specializationLabel}</span>`
+                : '';
+
             return `
-                <div class="model-card" data-model-id="${model.id}" data-modality="${model.modality}" data-tier="${model.tier}">
+                <div class="model-card" data-model-id="${model.id}" data-modality="${model.modality}" data-specialization="${model.specialization || 'general'}" data-tier="${model.tier}">
                     <div class="model-header">
                         <div>
                             <div class="model-name">${model.name}</div>
@@ -762,6 +808,7 @@
                     <div class="model-meta">
                         <span class="meta-tag modality">${modalityIcon} ${model.modality}</span>
                         <span class="meta-tag">${model.architecture}</span>
+                        ${specializationTag}
                         ${model.requires_gpu ? '<span class="meta-tag" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">GPU</span>' : '<span class="meta-tag" style="background: rgba(34, 197, 94, 0.1); color: #22c55e;">CPU</span>'}
                     </div>
                     <div class="model-size">
@@ -800,6 +847,9 @@
                 //Update UI to show downloading
                 updateModelStatus(modelId, 'downloading');
 
+                // Persist active download so it survives refresh
+                localStorage.setItem('activeDownload', modelId);
+
                 const response = await fetch(`${API_BASE}/zoo/download`, {
                     method: 'POST',
                     headers: authHeaders,
@@ -827,10 +877,10 @@
         // Update download progress UI
         function updateDownloadProgress(percent, downloaded_mb, total_mb, speed_mbps, eta) {
             document.getElementById('download-progress-bar').style.width = `${percent}%`;
-            document.getElementById('download-progress-bar').textContent = `${Math.round(percent)}%`;
-            document.getElementById('download-size').textContent = `${downloaded_mb.toFixed(1)} MB / ${total_mb.toFixed(1)} MB`;
-            document.getElementById('download-speed').textContent = `${speed_mbps.toFixed(2)} MB/s`;
-            document.getElementById('download-eta').textContent = eta;
+                document.getElementById('download-progress-bar').textContent = `${Math.round(percent)}%`;
+                document.getElementById('download-size').textContent = `${downloaded_mb.toFixed(1)} MB / ${total_mb.toFixed(1)} MB`;
+                document.getElementById('download-speed').textContent = `${speed_mbps.toFixed(2)} MB/s`;
+                document.getElementById('download-eta').textContent = eta;
         }
 
         // Poll download progress
@@ -880,8 +930,10 @@
                         updateDownloadProgress(100, data.download_progress?.total_mb || 0, data.download_progress?.total_mb || 0, 0, '0:00');
                         addDownloadLog(`✓ اكتمل التحميل! ${(data.download_progress?.total_mb || 0).toFixed(1)} MB`, 'success');
                         updateLoadedStats();
+                        localStorage.removeItem('activeDownload');
                     } else if (data.status === 'error') {
                         addDownloadLog(`✗ فشل التحميل`, 'error');
+                        localStorage.removeItem('activeDownload');
                     }
                 } catch (error) {
                     console.error('Poll failed:', error);
@@ -889,6 +941,26 @@
                 }
             };
             poll();
+        }
+
+        // Resume active downloads after refresh
+        function resumeActiveDownload() {
+            const activeId = localStorage.getItem('activeDownload');
+
+            // Find any model marked as downloading
+            const allModels = [...catalog.text, ...catalog.vision, ...catalog.audio, ...catalog.multimodal];
+            const downloadingModel = allModels.find(m => m.status === 'downloading' || m.id === activeId);
+
+            if (!downloadingModel) {
+                localStorage.removeItem('activeDownload');
+                return;
+            }
+
+            const modelName = downloadingModel.name || downloadingModel.id;
+            document.getElementById('download-model-name').textContent = modelName;
+            document.getElementById('download-modal').classList.add('active');
+            addDownloadLog(`● استكمال التحميل لـ ${modelName}...`);
+            pollDownloadProgress(downloadingModel.id);
         }
 
         // Update model status in UI
@@ -1093,7 +1165,14 @@
                 } else {
                     sections.forEach(s => s.style.display = '');
                     cards.forEach(c => {
-                        c.style.display = c.dataset.modality === filter ? '' : 'none';
+                        const modalityMatch = ['text', 'vision', 'audio', 'multimodal'].includes(filter) && c.dataset.modality === filter;
+                        const specialization = c.dataset.specialization || 'general';
+                        const hasSpecialization = specialization !== 'general';
+                        const specializationMatch = ['specialized', 'math', 'biology', 'coding'].includes(filter) && (
+                            filter === 'specialized' ? hasSpecialization : specialization === filter
+                        );
+
+                        c.style.display = (modalityMatch || specializationMatch) ? '' : 'none';
                     });
                 }
             });

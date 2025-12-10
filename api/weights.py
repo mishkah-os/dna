@@ -9,6 +9,7 @@ from typing import Optional
 import json
 import sys
 import numpy as np
+import math
 
 # Ensure src is in path
 if 'src' not in sys.path:
@@ -110,6 +111,40 @@ def prepare_3d_mesh(weights_array, subsample=10, height_scale=5.0, width_scale=1
     }
 
 
+def prepare_heatmap(weights_array, subsample: int = 1, max_side: int = 256):
+    """Prepare downsampled normalized matrix for 2D heatmaps."""
+
+    if weights_array.ndim == 1:
+        weights_array = weights_array.reshape(1, -1)
+    elif weights_array.ndim > 2:
+        weights_array = weights_array.reshape(weights_array.shape[0], -1)
+
+    weights_array = weights_array.astype(np.float32)
+
+    rows, cols = weights_array.shape
+
+    row_stride = max(1, subsample, math.ceil(rows / max_side))
+    col_stride = max(1, subsample, math.ceil(cols / max_side))
+
+    sampled = weights_array[::row_stride, ::col_stride]
+
+    w_min, w_max = sampled.min(), sampled.max()
+    w_range = w_max - w_min if (w_max - w_min) > 1e-8 else 1.0
+    normalized = (sampled - w_min) / w_range
+
+    return {
+        "matrix": normalized.tolist(),
+        "shape": [int(sampled.shape[0]), int(sampled.shape[1])],
+        "stride": [int(row_stride), int(col_stride)],
+        "stats": {
+            "min": float(sampled.min()),
+            "max": float(sampled.max()),
+            "mean": float(sampled.mean()),
+            "std": float(sampled.std()),
+        }
+    }
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -172,6 +207,36 @@ async def get_layer_3d_data(
             "model_id": model_id,
             "layer_name": layer_name,
             **mesh
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed: {e}")
+
+
+@router.get("/weights/{model_id}/layer/{layer_name}/heatmap")
+async def get_layer_heatmap(
+    model_id: str,
+    layer_name: str,
+    subsample: int = 1,
+    max_side: int = 256
+):
+    """Get downsampled 2D heatmap data for a layer"""
+
+    try:
+        weights = extract_model_weights(model_id)
+
+        if layer_name not in weights:
+            raise HTTPException(404, f"Layer '{layer_name}' not found")
+
+        layer_weights = weights[layer_name]
+
+        heatmap = prepare_heatmap(layer_weights, subsample=subsample, max_side=max_side)
+
+        return {
+            "model_id": model_id,
+            "layer_name": layer_name,
+            **heatmap,
         }
     except HTTPException:
         raise
