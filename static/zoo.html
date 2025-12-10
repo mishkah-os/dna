@@ -877,10 +877,10 @@
         // Update download progress UI
         function updateDownloadProgress(percent, downloaded_mb, total_mb, speed_mbps, eta) {
             document.getElementById('download-progress-bar').style.width = `${percent}%`;
-            document.getElementById('download-progress-bar').textContent = `${Math.round(percent)}%`;
-            document.getElementById('download-size').textContent = `${downloaded_mb.toFixed(1)} MB / ${total_mb.toFixed(1)} MB`;
-            document.getElementById('download-speed').textContent = `${speed_mbps.toFixed(2)} MB/s`;
-            document.getElementById('download-eta').textContent = eta;
+                document.getElementById('download-progress-bar').textContent = `${Math.round(percent)}%`;
+                document.getElementById('download-size').textContent = `${downloaded_mb.toFixed(1)} MB / ${total_mb.toFixed(1)} MB`;
+                document.getElementById('download-speed').textContent = `${speed_mbps.toFixed(2)} MB/s`;
+                document.getElementById('download-eta').textContent = eta;
         }
 
         // Poll download progress
