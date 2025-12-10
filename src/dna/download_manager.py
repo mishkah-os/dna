@@ -104,6 +104,8 @@ class DownloadManager:
         
         # Active downloads
         self._active_downloads: dict[str, DownloadProgress] = {}
+        # Backwards-compat alias used by API/SSE layer
+        self._downloads = self._active_downloads
         self._download_threads: dict[str, threading.Thread] = {}
         
         logger.info(f"DownloadManager initialized (cache={self.cache_dir})")
@@ -261,6 +263,16 @@ class DownloadManager:
     def get_active_downloads(self) -> List[str]:
         """Get list of active downloads"""
         return list(self._active_downloads.keys())
+
+    # ------------------------------------------------------------------ #
+    # Compatibility helper for API layer
+    # ------------------------------------------------------------------ #
+    def download_model(self, model_id: str, hf_name: Optional[str] = None, force: bool = False) -> bool:
+        """
+        Wrapper expected by api.zoo to start a download.
+        hf_name is ignored because the manager already looks up model metadata internally.
+        """
+        return self.download(model_id=model_id, force=force)
 
 
 # ============================================================================
