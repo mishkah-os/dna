@@ -17,29 +17,6 @@ __version__ = "2.1.0"
 __author__ = "Mohammed Mishkah, Mohammed Malik Hussein"
 __license__ = "MIT"
 
-# Core SIREN networks
-from .siren import (
-    SineLayer,
-    SpectralDNA,
-    HierarchicalSpectralDNA,
-    AdaptiveSpectralDNA
-)
-
-# Weight dataset and extraction
-from .weight_dataset import (
-    WeightCoordinateMapper,
-    WeightDataset,
-    WeightExtractorForSIREN,
-    create_dataloader,
-    visualize_coordinate_distribution
-)
-
-# Pattern mining
-from .pattern_miner import PatternMiner
-
-# Visualization
-from .pattern_visualizer import PatternVisualizer
-
 # Utilities
 from .logging_utils import setup_logger
 
@@ -56,13 +33,41 @@ from .model_zoo import (
     TaskType,
 )
 
-# Model Runner
-from .model_runner import (
-    TinyModelRunner,
-    get_runner,
-    RunResult,
-    ModelStatus,
-)
+ML_IMPORT_ERROR = None
+
+try:
+    # Core SIREN networks
+    from .siren import (
+        SineLayer,
+        SpectralDNA,
+        HierarchicalSpectralDNA,
+        AdaptiveSpectralDNA
+    )
+
+    # Weight dataset and extraction
+    from .weight_dataset import (
+        WeightCoordinateMapper,
+        WeightDataset,
+        WeightExtractorForSIREN,
+        create_dataloader,
+        visualize_coordinate_distribution
+    )
+
+    # Pattern mining
+    from .pattern_miner import PatternMiner
+
+    # Visualization
+    from .pattern_visualizer import PatternVisualizer
+
+    # Model Runner
+    from .model_runner import (
+        TinyModelRunner,
+        get_runner,
+        RunResult,
+        ModelStatus,
+    )
+except ModuleNotFoundError as exc:
+    ML_IMPORT_ERROR = exc
 
 __all__ = [
     # SIREN networks
@@ -103,5 +108,5 @@ __all__ = [
     "get_runner",
     "RunResult",
     "ModelStatus",
+    "ML_IMPORT_ERROR",
 ]
-
